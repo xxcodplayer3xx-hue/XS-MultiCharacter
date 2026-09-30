@@ -3,6 +3,9 @@ local characters, spawnOptions = {}, {}
 local activeCharacter, activeCharacterData
 local waitingForClothing, selectorOpen = false, false
 local openingClothing, clothingHandledElsewhere = false, false
+local customClothingOpen = false
+local clothingItems = {}
+local clothingHeading = 0.0
 local previewToken = 0
 
 if not XSValidation.print('client') then return end
@@ -201,10 +204,87 @@ if firstCharacterEvent then
     end)
 end
 
+local function clothingCategories(ped)
+    local categories = {
+        { id = "mask", short = "01", label = "Face Cover", name = "Mask", kind = "component", slot = 1 },
+        { id = "hair", short = "02", label = "Hair", name = "Hair", kind = "component", slot = 2 },
+        { id = "arms", short = "03", label = "Arms", name = "Arms", kind = "component", slot = 3 },
+        { id = "jacket", short = "04", label = "Outerwear", name = "Jacket", kind = "component", slot = 11 },
+        { id = "shirt", short = "05", label = "Base Layer", name = "Shirt", kind = "component", slot = 8 },
+        { id = "pants", short = "06", label = "Trousers", name = "Pants", kind = "component", slot = 4 },
+        { id = "shoes", short = "07", label = "Footwear", name = "Shoes", kind = "component", slot = 6 },
+        { id = "bags", short = "08", label = "Bags", name = "Bag", kind = "component", slot = 5 },
+        { id = "accessory", short = "09", label = "Accessories", name = "Accessory", kind = "component", slot = 7 },
+        { id = "undershirt", short = "10", label = "Undershirt", name = "Undershirt", kind = "component", slot = 8 },
+        { id = "armor", short = "11", label = "Body Armor", name = "Armor", kind = "component", slot = 9 },
+        { id = "decals", short = "12", label = "Decals", name = "Decal", kind = "component", slot = 10 },
+        { id = "hat", short = "13", label = "Headwear", name = "Hat", kind = "prop", slot = 0 },
+        { id = "glasses", short = "14", label = "Eyewear", name = "Glasses", kind = "prop", slot = 1 },
+        { id = "ear", short = "15", label = "Earwear", name = "Earrings", kind = "prop", slot = 2 },
+        { id = "watch", short = "16", label = "Wristwear", name = "Watch", kind = "prop", slot = 6 },
+        { id = "bracelet", short = "17", label = "Bracelets", name = "Bracelet", kind = "prop", slot = 7 }
+    }
+    for _, item in ipairs(categories) do
+        if item.kind == "component" then
+            item.drawable = GetPedDrawableVariation(ped, item.slot)
+            item.drawables = math.max(GetNumberOfPedDrawableVariations(ped, item.slot), 1)
+            item.texture = GetPedTextureVariation(ped, item.slot)
+            item.textures = math.max(GetNumberOfPedTextureVariations(ped, item.slot, item.drawable), 1)
+        else
+            item.drawable = GetPedPropIndex(ped, item.slot)
+            item.drawables = math.max(GetNumberOfPedPropDrawableVariations(ped, item.slot), 1)
+            item.texture = item.drawable >= 0 and GetPedPropTextureIndex(ped, item.slot) or 0
+            item.textures = item.drawable >= 0 and math.max(GetNumberOfPedPropTextureVariations(ped, item.slot, item.drawable), 1) or 1
+        end
+    end
+    return categories
+end
+
+local function openCustomClothing()
+    local ped = PlayerPedId()
+    clothingItems = clothingCategories(ped)
+    clothingHeading = GetEntityHeading(ped)
+    customClothingOpen = true
+    SetNuiFocus(true, true)
+    SendNUIMessage({ action = "clothingOpen", categories = clothingItems })
+    if IsScreenFadedOut() then DoScreenFadeIn(350) end
+end
+
+local function finishCustomClothing()
+    if not customClothingOpen then return end
+    customClothingOpen = false
+    waitingForClothing = false
+    XSAppearance.saveCurrent()
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = "clothingClose" })
+    openApartmentsAfterClothing()
+end
+
+local function openCustomAfterApartment()
+    CreateThread(function()
+        Wait(750)
+        local deadline = GetGameTimer() + 120000
+        while waitingForClothing and GetGameTimer() < deadline do
+            if not IsNuiFocused() then
+                Wait(350)
+                if waitingForClothing and not IsNuiFocused() then
+                    openCustomClothing()
+                    return
+                end
+            end
+            Wait(150)
+        end
+    end)
+end
+
 local function openClothingWhenClear()
     local clothing = Config.FirstCharacter.clothing
     CreateThread(function()
         Wait(clothing.openDelayMs or 0)
+        if clothing.custom == true then
+            if waitingForClothing then openCustomClothing() end
+            return
+        end
         if IsNuiFocused() then
             local clear = GetGameTimer() + ((clothing.waitForOtherMenusSeconds or 0) * 1000)
             while waitingForClothing and IsNuiFocused() and GetGameTimer() < clear do Wait(150) end
@@ -263,19 +343,25 @@ RegisterNetEvent('XS-MultiCharacter:client:loggedIn', function(citizenid, positi
         local ped = PlayerPedId()
         SetEntityVisible(ped, true, false)
         FreezeEntityPosition(ped, false)
+        DoScreenFadeIn(450)
 
         -- The stock apartment flow opens clothing after the apartment is made.
         -- Starting either of those here would make the two menus overlap.
         if Config.FirstCharacter.apartments.enabled
-            and Config.FirstCharacter.apartments.opensClothingAfterSelection ~= false
+            and (Config.FirstCharacter.clothing.custom == true
+                or Config.FirstCharacter.apartments.opensClothingAfterSelection ~= false)
             and XSBridge.openApartments(activeCharacterData or activeCharacter) then
             XSPed.begin(nil)
+            if Config.FirstCharacter.clothing.custom == true then
+                waitingForClothing = true
+                openCustomAfterApartment()
+            end
             return
         end
 
         debugPrint('No apartment resource to hand the new character to, using the spawn and clothing fallback.')
         spawnAt(Config.Spawn.default, 'default')
-        if Config.FirstCharacter.clothing.enabled and Config.FirstCharacter.clothing.mode ~= 'none' then
+        if Config.FirstCharacter.clothing.enabled and (Config.FirstCharacter.clothing.custom == true or Config.FirstCharacter.clothing.mode ~= 'none') then
             waitingForClothing = true
             openClothingWhenClear()
         else
@@ -293,6 +379,48 @@ end)
 
 RegisterNetEvent('XS-MultiCharacter:client:refresh', function()
     TriggerServerEvent('XS-MultiCharacter:server:list')
+end)
+
+RegisterNUICallback("clothingChange", function(data, cb)
+    if not customClothingOpen or type(data) ~= "table" then cb("ok") return end
+    local ped = PlayerPedId()
+    for _, item in ipairs(clothingItems) do
+        if item.id == data.id and item.kind == data.kind then
+            local minimum = item.kind == "prop" and -1 or 0
+            local drawable = math.max(minimum, math.min((item.drawables or 1) - 1, math.floor(tonumber(data.drawable) or 0)))
+            local textures = 1
+            if item.kind == "component" then
+                textures = math.max(GetNumberOfPedTextureVariations(ped, item.slot, drawable), 1)
+            elseif drawable >= 0 then
+                textures = math.max(GetNumberOfPedPropTextureVariations(ped, item.slot, drawable), 1)
+            end
+            local texture = math.max(0, math.min(textures - 1, math.floor(tonumber(data.texture) or 0)))
+            item.drawable, item.texture, item.textures = drawable, texture, textures
+            if item.kind == "component" then
+                SetPedComponentVariation(ped, item.slot, drawable, texture, 0)
+            elseif drawable < 0 then
+                ClearPedProp(ped, item.slot)
+            else
+                SetPedPropIndex(ped, item.slot, drawable, texture, true)
+            end
+            cb({ ok = true, id = item.id, drawable = item.drawable, texture = item.texture, textures = item.textures })
+            return
+        end
+    end
+    cb({ ok = false })
+end)
+
+RegisterNUICallback("clothingRotate", function(data, cb)
+    if customClothingOpen then
+        clothingHeading = clothingHeading + (tonumber(data.direction) or 0) * 12.0
+        SetEntityHeading(PlayerPedId(), clothingHeading % 360.0)
+    end
+    cb("ok")
+end)
+
+RegisterNUICallback("clothingFinish", function(_, cb)
+    finishCustomClothing()
+    cb("ok")
 end)
 
 RegisterNUICallback('preview', function(data, cb)

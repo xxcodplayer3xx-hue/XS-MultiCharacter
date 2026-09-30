@@ -17,6 +17,8 @@ Config.Characters = {
 Config.FirstCharacter = {
     clothing = {
         enabled = true,
+        custom = true, -- use this resource's custom native clothing lab instead of a stock editor
+        -- Set custom to false to return to the configured external appearance menu.
         mode = 'auto', -- auto, qb-clothing, illenium-appearance, fivem-appearance, event, none
         event = '',
 
@@ -35,7 +37,7 @@ Config.FirstCharacter = {
         -- usually an apartment or spawn selector. These decide how long to wait
         -- for it to appear, how long to let the player use it, and how long to
         -- give it to open the clothing editor itself before this one does.
-        openDelayMs = 3000,
+        openDelayMs = 250,
         waitForOtherMenusSeconds = 300,
         handoffSeconds = 10
     },
@@ -48,10 +50,9 @@ Config.FirstCharacter = {
         -- here if it is a renamed fork.
         resource = '',
 
-        -- Standard Qbox/QBCore apartments open first-character clothing after
-        -- the apartment is picked. Turn this off only if your custom apartment
-        -- event does not handle clothing for you.
-        opensClothingAfterSelection = true
+        -- The custom clothing lab opens after the apartment UI closes. Keep this
+        -- false so an apartment resource does not open its stock clothing menu.
+        opensClothingAfterSelection = false
     }
 }
 

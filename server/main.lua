@@ -306,7 +306,7 @@ RegisterNetEvent('XS-MultiCharacter:server:create', function(data)
     end
     local newData = { cid = cid, charinfo = {
         firstname = first, lastname = last, birthdate = tostring(data.birthdate or ''),
-        gender = tonumber(data.gender) == 1 and 1 or 0,
+        gender = (data.gender == true or tonumber(data.gender) == 1) and 1 or 0,
         nationality = tostring(data.nationality or Config.Characters.defaultNationality):sub(1, 24)
     }}
     if XSBridge.login(src, nil, newData) then

@@ -27,6 +27,7 @@ end
 function XSAppearance.apply(ped, saved)
     if not saved then return false end
     if saved.ped and XSPed.matches(ped, saved.model) then return XSPed.applyVariation(ped, saved.ped) end
+    if saved.variation and XSPed.matches(ped, saved.model) then return XSPed.applyVariation(ped, saved.variation) end
     if not saved.appearance then return false end
     local mode = XSAppearance.mode()
     if mode == 'illenium-appearance' then
@@ -42,7 +43,7 @@ end
 
 function XSAppearance.firstCharacterEvent()
     local clothing = Config.FirstCharacter.clothing
-    if clothing.mode == 'none' then return nil end
+    if clothing.custom == true or clothing.mode == 'none' then return nil end
     if clothing.mode == 'event' then
         return clothing.event ~= '' and clothing.event or nil
     end
@@ -51,9 +52,33 @@ function XSAppearance.firstCharacterEvent()
 end
 
 function XSAppearance.openFirstCharacter()
+    if Config.FirstCharacter.clothing.custom == true then return false end
     if Config.FirstCharacter.clothing.mode == 'auto' and XSAppearance.mode() == 'none' then return false end
     local event = XSAppearance.firstCharacterEvent()
     if not event then return false end
     TriggerEvent(event)
     return true
+end
+
+--- Save the current ped through the installed appearance resource.
+--- @return boolean success Whether an appearance save request was sent
+function XSAppearance.saveCurrent()
+    if Config.FirstCharacter.clothing.custom ~= true then return false end
+    local mode = XSAppearance.mode()
+    local ped = PlayerPedId()
+    local ok, appearance
+    if mode == "illenium-appearance" or mode == "fivem-appearance" then
+        ok, appearance = pcall(function()
+            return exports[mode]:getPedAppearance(ped)
+        end)
+        if ok and appearance then
+            TriggerServerEvent(("%s:server:saveAppearance"):format(mode), appearance)
+            return true
+        end
+    end
+    if mode == "qb-clothing" then
+        TriggerEvent("qb-clothing:client:saveSkin")
+        return true
+    end
+    return false
 end

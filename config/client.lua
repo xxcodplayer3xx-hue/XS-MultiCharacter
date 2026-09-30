@@ -92,6 +92,7 @@ Config.Client.UI = {
     subtitle = 'IDENTITY NETWORK',
     accent = '#8b5cf6',
     background = '#090a0f',
+    clothingAccent = '#8b5cf6',
     showCash = true,
     showBank = true,
     showCitizenId = true,

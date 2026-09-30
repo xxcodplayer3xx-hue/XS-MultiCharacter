@@ -5,7 +5,7 @@ lua54 'yes'
 name 'XS-MultiCharacter'
 author 'XyraL'
 description 'A clean multicharacter and spawn flow for Qbox and QBCore.'
-version '2.2.0'
+version '2.2.1'
 
 shared_scripts {
     'config/shared.lua',
@@ -36,7 +36,10 @@ files {
     'html/css/style.css',
     'html/css/admin.css',
     'html/js/app.js',
-    'sql/*.sql'
+    'sql/*.sql',
+    "html/tailwind.css",
+    "html/fonts/*.woff2",
+    "html/fonts.css"
 }
 
 dependencies { 'oxmysql' }

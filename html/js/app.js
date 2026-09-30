@@ -9,6 +9,7 @@ let config = {};
 let characters = [];
 let slotCount = 1;
 let deleting = null;
+let clothingState = { categories: [], active: 0, items: {} };
 
 const text = (key) => config.locale?.[key] || key;
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
@@ -36,6 +37,81 @@ function formatPlaytime(seconds) {
 function closeModals() {
     document.querySelectorAll('.modal').forEach((element) => element.classList.add('hidden'));
 }
+
+function activeClothingItem() {
+    const category = clothingState.categories[clothingState.active];
+    return category ? clothingState.items[category.id] : null;
+}
+
+function renderClothing() {
+    const item = activeClothingItem();
+    if (!item) return;
+    document.querySelectorAll('.clothing-category').forEach((element, index) => element.classList.toggle('active', index === clothingState.active));
+    $('#clothingCategoryName').textContent = item.label.toUpperCase();
+    $('#clothingItemName').textContent = item.name;
+    $('#clothingItemNumber').textContent = String(clothingState.active + 1).padStart(2, '0');
+    $('#clothingVariant').textContent = String(item.drawable + 1).padStart(2, '0');
+    $('#clothingVariantCount').textContent = `${String(item.drawables).padStart(2, '0')} OPTIONS`;
+    $('#clothingTexture').textContent = String(item.texture + 1).padStart(2, '0');
+    $('#clothingTextureCount').textContent = `${String(item.textures).padStart(2, '0')} COLORS`;
+    $('#clothingStep').textContent = `${String(clothingState.active + 1).padStart(2, '0')} / ${String(clothingState.categories.length).padStart(2, '0')}`;
+    $('#clothingHint').textContent = item.kind === 'prop' ? 'Choose a prop, then tune its finish.' : 'Choose a cut, then tune its finish.';
+    $('#clothingSummary').innerHTML = clothingState.categories.map((category) => {
+        const selected = clothingState.items[category.id];
+        return `<span><i>${escapeHtml(category.short)}</i><b>${String((selected?.drawable || 0) + 1).padStart(2, '0')}</b></span>`;
+    }).join('');
+}
+
+function openClothing(data) {
+    clothingState = { categories: data.categories || [], active: 0, items: {} };
+    clothingState.categories.forEach((category) => { clothingState.items[category.id] = category; });
+    $('#characterView').classList.add('hidden');
+    $('#detailView').classList.add('hidden');
+    $('#spawnView').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    $('#clothingView').classList.remove('hidden');
+    $('#clothingCategories').innerHTML = clothingState.categories.map((category, index) => `<button type="button" class="clothing-category ${index === 0 ? 'active' : ''}" data-clothing-category="${escapeHtml(category.id)}"><span>${escapeHtml(category.short)}</span><b>${escapeHtml(category.label)}</b></button>`).join('');
+    renderClothing();
+}
+
+async function clothingAction(action) {
+    const item = activeClothingItem();
+    if (!item) return;
+    const minimum = item.kind === 'prop' ? -1 : 0;
+    const nextValue = (value, amount, maximum) => Math.max(minimum, Math.min(Math.max(maximum - 1, minimum), value + amount));
+    if (action === 'previous') item.drawable = nextValue(item.drawable, -1, item.drawables);
+    if (action === 'next') item.drawable = nextValue(item.drawable, 1, item.drawables);
+    if (action === 'texture-previous') item.texture = nextValue(item.texture, -1, item.textures);
+    if (action === 'texture-next') item.texture = nextValue(item.texture, 1, item.textures);
+    if (action === 'rotate-left' || action === 'rotate-right') {
+        nui('clothingRotate', { direction: action === 'rotate-left' ? -1 : 1 });
+        return;
+    }
+    const result = await nui('clothingChange', { id: item.id, kind: item.kind, drawable: item.drawable, texture: item.texture })
+        .then((response) => response.json())
+        .catch(() => null);
+    if (result?.ok) {
+        item.drawable = result.drawable;
+        item.texture = result.texture;
+        item.textures = result.textures;
+    }
+    renderClothing();
+}
+
+const clothingClick = (event) => {
+    const category = event.target.closest('[data-clothing-category]');
+    if (category) {
+        const index = clothingState.categories.findIndex((item) => item.id === category.dataset.clothingCategory);
+        if (index >= 0) { clothingState.active = index; renderClothing(); }
+        return;
+    }
+    const action = event.target.closest('[data-clothing-action]')?.dataset.clothingAction;
+    if (action) clothingAction(action);
+};
+
+$('#clothingCategories').addEventListener('click', clothingClick);
+document.querySelector('.clothing-inspector').addEventListener('click', clothingClick);
+document.querySelector('.stage-controls').addEventListener('click', clothingClick);
 
 function applyLocale() {
     const bindings = {
@@ -209,6 +285,11 @@ window.addEventListener('message', ({ data }) => {
         renderCharacters();
     }
     if (data.action === 'spawns') renderSpawns(data.locations || [], data.categories || []);
+    if (data.action === 'clothingOpen') openClothing(data);
+    if (data.action === 'clothingClose') {
+        $('#clothingView').classList.add('hidden');
+        $('#app').classList.add('hidden');
+    }
     if (data.action === 'adminSlots') {
         config.locale = data.locale;
         config.ui = data.ui;
@@ -245,4 +326,14 @@ $('#confirmDelete').onclick = () => {
     $('#detailView').classList.add('hidden');
     closeModals();
 };
+$('#clothingFinish').onclick = () => {
+    $('#clothingFinish').disabled = true;
+    nui('clothingFinish').finally(() => { $('#clothingFinish').disabled = false; });
+};
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('#clothingView').classList.contains('hidden')) {
+        event.preventDefault();
+        nui('clothingFinish');
+    }
+});
 $('#adminClose').onclick = () => nui('adminClose');

@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="fonts.css">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/admin.css">
     <title>XS-MultiCharacter</title>
@@ -58,6 +60,37 @@
             <div class="panel-heading"><div><small id="arrival">ARRIVAL</small><h1 id="chooseSpawn">Where are you heading?</h1></div></div>
             <div id="spawnFocus" class="spawn-focus hidden"><small id="spawnDistrictLabel">DISTRICT</small><strong id="spawnFocusTitle"></strong><span id="spawnFocusDistrict"></span></div>
             <div id="spawns" class="spawn-list"></div>
+        </section>
+
+        <section id="clothingView" class="clothing-overlay hidden">
+            <div class="clothing-header">
+                <div class="clothing-brand"><span class="clothing-mark">XS</span><div><small>PERSONAL IMAGE SYSTEM</small><strong>STYLE LAB</strong></div></div>
+                <div class="clothing-progress"><span>FIRST IMPRESSION</span><b id="clothingStep">01 / 05</b><i><em></em></i></div>
+                <div class="clothing-status"><span class="status-dot"></span><span>LIVE PREVIEW</span></div>
+            </div>
+            <div class="clothing-grid">
+                <nav id="clothingCategories" class="clothing-categories" aria-label="Clothing categories"></nav>
+                <section class="clothing-stage">
+                    <div class="stage-kicker">WARDROBE / <span id="clothingCategoryName">OUTERWEAR</span></div>
+                    <div class="stage-title"><h1 id="clothingItemName">Jacket</h1><span id="clothingItemNumber">01</span></div>
+                    <div class="stage-rule"><span></span></div>
+                    <p id="clothingHint" class="stage-hint">Use the controls to build your first look.</p>
+                    <div class="stage-controls">
+                        <button type="button" class="round-control" data-clothing-action="rotate-left" aria-label="Rotate left">↶</button>
+                        <span>ROTATE PREVIEW</span>
+                        <button type="button" class="round-control" data-clothing-action="rotate-right" aria-label="Rotate right">↷</button>
+                    </div>
+                </section>
+                <aside class="clothing-inspector">
+                    <div class="inspector-heading"><span>SELECT VARIANT</span><b id="clothingVariantCount">01 / 01</b></div>
+                    <div class="variant-control"><button type="button" data-clothing-action="previous" aria-label="Previous variant">−</button><strong id="clothingVariant">01</strong><button type="button" data-clothing-action="next" aria-label="Next variant">+</button></div>
+                    <div class="texture-heading"><span>TEXTURE / COLOR</span><b id="clothingTextureCount">01 / 01</b></div>
+                    <div class="texture-control"><button type="button" data-clothing-action="texture-previous" aria-label="Previous texture">−</button><strong id="clothingTexture">01</strong><button type="button" data-clothing-action="texture-next" aria-label="Next texture">+</button></div>
+                    <div class="look-summary"><small>LOOK SUMMARY</small><div id="clothingSummary"></div></div>
+                    <button type="button" id="clothingFinish" class="clothing-finish">SAVE LOOK <span>→</span></button>
+                </aside>
+            </div>
+            <div class="clothing-footer"><span>Changes are applied instantly to your character.</span><span>ESC <b>does not discard</b> your look</span></div>
         </section>
 
         <section id="adminView" class="admin-overlay hidden">
