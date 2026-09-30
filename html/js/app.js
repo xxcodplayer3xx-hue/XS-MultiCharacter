@@ -50,15 +50,33 @@ function renderClothing() {
     $('#clothingCategoryName').textContent = item.label.toUpperCase();
     $('#clothingItemName').textContent = item.name;
     $('#clothingItemNumber').textContent = String(clothingState.active + 1).padStart(2, '0');
-    $('#clothingVariant').textContent = String(item.drawable + 1).padStart(2, '0');
-    $('#clothingVariantCount').textContent = `${String(item.drawables).padStart(2, '0')} OPTIONS`;
-    $('#clothingTexture').textContent = String(item.texture + 1).padStart(2, '0');
-    $('#clothingTextureCount').textContent = `${String(item.textures).padStart(2, '0')} COLORS`;
+    const isAppearance = item.kind !== 'component' && item.kind !== 'prop';
+    const value = isAppearance ? Number(item.value ?? 0) : Number(item.drawable ?? 0);
+    const minimum = isAppearance ? Number(item.minimum ?? 0) : 0;
+    const maximum = isAppearance ? Number(item.maximum ?? 0) : Number(item.drawables ?? 1) - 1;
+    const texture = Number(item.texture ?? 0);
+    const textureMaximum = isAppearance ? 0 : Number(item.textures ?? 1) - 1;
+    $('#clothingVariant').textContent = isAppearance
+        ? (item.step < 1 ? value.toFixed(2) : String(value + (minimum >= 0 ? 1 : 0)).padStart(2, '0'))
+        : String(value + 1).padStart(2, '0');
+    $('#clothingVariantCount').textContent = isAppearance
+        ? `${minimum.toFixed(item.step < 1 ? 2 : 0)} — ${maximum.toFixed(item.step < 1 ? 2 : 0)}`
+        : `${String(item.drawables).padStart(2, '0')} OPTIONS`;
+    $('#clothingTexture').textContent = String(texture + 1).padStart(2, '0');
+    $('#clothingTextureCount').textContent = isAppearance ? 'NATIVE PREVIEW' : `${String(item.textures).padStart(2, '0')} COLORS`;
     $('#clothingStep').textContent = `${String(clothingState.active + 1).padStart(2, '0')} / ${String(clothingState.categories.length).padStart(2, '0')}`;
-    $('#clothingHint').textContent = item.kind === 'prop' ? 'Choose a prop, then tune its finish.' : 'Choose a cut, then tune its finish.';
+    $('#clothingHint').textContent = item.kind === 'prop'
+        ? 'Choose a prop, then tune its finish.'
+        : item.kind === 'component'
+            ? 'Choose a garment, then tune its finish.'
+            : 'Adjust the feature and watch the live preview update.';
     $('#clothingSummary').innerHTML = clothingState.categories.map((category) => {
         const selected = clothingState.items[category.id];
-        return `<span><i>${escapeHtml(category.short)}</i><b>${String((selected?.drawable || 0) + 1).padStart(2, '0')}</b></span>`;
+        const selectedValue = selected?.kind === 'component' || selected?.kind === 'prop'
+            ? Number(selected?.drawable ?? 0) + 1
+            : Number(selected?.value ?? 0);
+        const displayValue = selected?.step < 1 ? selectedValue.toFixed(2) : String(selectedValue).padStart(2, '0');
+        return `<span><i>${escapeHtml(category.short)}</i><b>${escapeHtml(displayValue)}</b></span>`;
     }).join('');
 }
 
@@ -78,23 +96,39 @@ function openClothing(data) {
 async function clothingAction(action) {
     const item = activeClothingItem();
     if (!item) return;
-    const minimum = item.kind === 'prop' ? -1 : 0;
-    const nextValue = (value, amount, maximum) => Math.max(minimum, Math.min(Math.max(maximum - 1, minimum), value + amount));
-    if (action === 'previous') item.drawable = nextValue(item.drawable, -1, item.drawables);
-    if (action === 'next') item.drawable = nextValue(item.drawable, 1, item.drawables);
-    if (action === 'texture-previous') item.texture = nextValue(item.texture, -1, item.textures);
-    if (action === 'texture-next') item.texture = nextValue(item.texture, 1, item.textures);
+    const isAppearance = item.kind !== 'component' && item.kind !== 'prop';
+    const minimum = isAppearance ? Number(item.minimum ?? 0) : (item.kind === 'prop' ? -1 : 0);
+    const maximum = isAppearance ? Number(item.maximum ?? minimum) : Number(item.drawables ?? 1) - 1;
+    const step = Number(item.step ?? 1);
+    const nextValue = (value, amount, limit) => Math.max(minimum, Math.min(limit, Number((value + (amount * step)).toFixed(2))));
+    if (action === 'previous') {
+        if (isAppearance) item.value = nextValue(item.value ?? minimum, -1, maximum);
+        else item.drawable = nextValue(item.drawable, -1, maximum);
+    }
+    if (action === 'next') {
+        if (isAppearance) item.value = nextValue(item.value ?? minimum, 1, maximum);
+        else item.drawable = nextValue(item.drawable, 1, maximum);
+    }
+    if (!isAppearance && action === 'texture-previous') item.texture = Math.max(0, Math.min(Number(item.textures ?? 1) - 1, item.texture - 1));
+    if (!isAppearance && action === 'texture-next') item.texture = Math.max(0, Math.min(Number(item.textures ?? 1) - 1, item.texture + 1));
     if (action === 'rotate-left' || action === 'rotate-right') {
         nui('clothingRotate', { direction: action === 'rotate-left' ? -1 : 1 });
         return;
     }
-    const result = await nui('clothingChange', { id: item.id, kind: item.kind, drawable: item.drawable, texture: item.texture })
+    const result = await nui('clothingChange', {
+        id: item.id,
+        kind: item.kind,
+        drawable: item.drawable,
+        texture: item.texture,
+        value: item.value
+    })
         .then((response) => response.json())
         .catch(() => null);
     if (result?.ok) {
-        item.drawable = result.drawable;
-        item.texture = result.texture;
-        item.textures = result.textures;
+        if (result.drawable !== undefined) item.drawable = result.drawable;
+        if (result.texture !== undefined) item.texture = result.texture;
+        if (result.textures !== undefined) item.textures = result.textures;
+        if (result.value !== undefined) item.value = result.value;
     }
     renderClothing();
 }

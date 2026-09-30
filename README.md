@@ -24,7 +24,9 @@ The character screen loads the player's saved appearance, gives each character a
 
 - Qbox and QBCore support
 - Saved appearance previews for illenium-appearance, fivem-appearance, and qb-clothing
-- Custom first-character Style Lab with live clothing, props, textures, and rotation controls
+- Immediate first-character Style Lab with a visible live player preview
+- Face creation controls for face blend, skin tone, eye color, facial features, hair, eyebrows, beard, and makeup
+- Live clothing, props, textures, and preview rotation controls
 - Remembers a ped a character was put in, without adding a ped picker
 - Character animations with job-specific presets
 - Identity dossier with support for fields from other resources
@@ -317,14 +319,14 @@ These are local lifecycle events for integrations. The resource does not expose 
 The default flow is:
 
 ```text
-Identity -> Apartment -> XS Style Lab
+Identity -> XS Style Lab -> Apartment or Spawn
 ```
 
-The custom Style Lab is enabled by default in `Config.FirstCharacter.clothing.custom`. It opens after the apartment selector closes and replaces the generic clothing menu with live component, prop, texture, and preview-rotation controls. The installed appearance resource is still used to save the completed look.
+The custom Style Lab is enabled by default in `Config.FirstCharacter.clothing.custom`. It opens immediately after a new character is created, before the apartment or spawn flow. The player is shown in a dedicated full-body preview camera while every change is applied to the real freemode ped and the visible mannequin. The editor includes clothing, props, textures, face blend, skin tone, eye color, facial features, hair, eyebrows, beard, and makeup controls. The installed appearance resource is still used to save the completed look.
 
 Set `custom = false` to use the configured external appearance menu instead. Auto only knows `qbx_apartments` and `qb-apartments`. If yours is a renamed fork, put its name in `Config.FirstCharacter.apartments.resource` so the handoff still happens.
 
-With no apartment resource to hand off to, it spawns at `Config.Spawn.default` and opens clothing itself. Before it does, it waits for anything else that took the screen to close, and drops out entirely if another resource opens the first-character editor first. Timings are in `Config.FirstCharacter.clothing`.
+After the look is saved, the resource opens the configured apartment selector. If no apartment resource is available, it spawns at `Config.Spawn.default`. The external appearance handoff and its timing options are only used when `custom = false`; the custom editor does not wait for another menu.
 
 Clothing opens with `qb-clothes:client:CreateFirstCharacter`, which qb-clothing, illenium-appearance, and fivem-appearance all listen for. If yours uses a different event, put it in `Config.FirstCharacter.clothing.firstCharacterEvent`.
 

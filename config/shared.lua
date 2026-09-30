@@ -33,13 +33,11 @@ Config.FirstCharacter = {
         },
         fallbackSeconds = 15,
 
-        -- Another resource can take the screen right after a character is made,
-        -- usually an apartment or spawn selector. These decide how long to wait
-        -- for it to appear, how long to let the player use it, and how long to
-        -- give it to open the clothing editor itself before this one does.
-        openDelayMs = 250,
-        waitForOtherMenusSeconds = 300,
-        handoffSeconds = 10
+        -- These are only used when custom is false and an external appearance
+        -- resource owns first-character customization.
+        openDelayMs = 0,
+        waitForOtherMenusSeconds = 0,
+        handoffSeconds = 0
     },
     apartments = {
         enabled = true,
@@ -50,8 +48,8 @@ Config.FirstCharacter = {
         -- here if it is a renamed fork.
         resource = '',
 
-        -- The custom clothing lab opens after the apartment UI closes. Keep this
-        -- false so an apartment resource does not open its stock clothing menu.
+        -- With the custom Style Lab enabled, the apartment selector opens only
+        -- after the player saves their face and clothing look.
         opensClothingAfterSelection = false
     }
 }

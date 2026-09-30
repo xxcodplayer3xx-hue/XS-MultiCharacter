@@ -37,16 +37,24 @@ local function createClothingPreview()
     local token = clothingPreviewToken
     local playerPed = PlayerPedId()
     local settings = clothingPreviewSettings()
-    local preview = ClonePed(playerPed, false, false, true)
+    local model = GetEntityModel(playerPed)
+    local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
 
-    if not preview or preview == 0 or not DoesEntityExist(preview) then
-        local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
-        local model = XSAppearance.model(nil, gender)
-        if not requestModel(model) then return false end
-        preview = CreatePed(2, model, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, settings.coords.w, false, true)
-        SetPedDefaultComponentVariation(preview)
-        SetModelAsNoLongerNeeded(model)
+    if not IsModelInCdimage(model) or not IsModelValid(model) then
+        model = XSAppearance.model(nil, gender)
     end
+    if not requestModel(model) then return false end
+
+    local playerCoords = GetEntityCoords(playerPed)
+    local preview = CreatePed(2, model, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, settings.coords.w, false, false)
+    if not preview or preview == 0 or not DoesEntityExist(preview) then
+        SetModelAsNoLongerNeeded(model)
+        return false
+    end
+
+    SetPedDefaultComponentVariation(preview)
+    if playerCoords then ClonePedToTarget(playerPed, preview) end
+    SetModelAsNoLongerNeeded(model)
 
     if token ~= clothingPreviewToken or not DoesEntityExist(preview) then
         if DoesEntityExist(preview) then DeleteEntity(preview) end
@@ -54,12 +62,13 @@ local function createClothingPreview()
     end
 
     clothingPreviewPed = preview
+    SetEntityAsMissionEntity(preview, true, true)
     SetEntityVisible(preview, true, false)
     SetEntityLocallyVisible(preview)
+    ResetEntityAlpha(preview)
     SetEntityAlpha(preview, 255, false)
     SetEntityCoordsNoOffset(preview, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, false, false, false)
     SetEntityHeading(preview, settings.coords.w)
-    SetEntityAsMissionEntity(preview, true, true)
     SetEntityCollision(preview, false, false)
     SetEntityInvincible(preview, true)
     SetEntityCanBeDamaged(preview, false)
@@ -280,6 +289,52 @@ if firstCharacterEvent then
     end)
 end
 
+local function headBlendValues(ped)
+    local values = {
+        shapeFirst = 0, shapeSecond = 0, shapeThird = 0,
+        skinFirst = 0, skinSecond = 0, skinThird = 0,
+        shapeMix = 0.5, skinMix = 0.5, thirdMix = 0.0
+    }
+    local blendData = {}
+    local ok = pcall(GetPedHeadBlendData, ped, blendData)
+    if ok then
+        values.shapeFirst = tonumber(blendData.shapeFirst) or values.shapeFirst
+        values.shapeSecond = tonumber(blendData.shapeSecond) or values.shapeSecond
+        values.shapeThird = tonumber(blendData.shapeThird) or values.shapeThird
+        values.skinFirst = tonumber(blendData.skinFirst) or values.skinFirst
+        values.skinSecond = tonumber(blendData.skinSecond) or values.skinSecond
+        values.skinThird = tonumber(blendData.skinThird) or values.skinThird
+        values.shapeMix = tonumber(blendData.shapeMix) or values.shapeMix
+        values.skinMix = tonumber(blendData.skinMix) or values.skinMix
+        values.thirdMix = tonumber(blendData.thirdMix) or values.thirdMix
+    end
+    return values
+end
+
+local function appearanceCategories(ped)
+    local blend = headBlendValues(ped)
+    local categories = {
+        { id = "faceShape", short = "F1", label = "Face Shape", name = "Face Shape", kind = "faceBlend", field = "shapeFirst", value = blend.shapeFirst, minimum = 0, maximum = 45, step = 1 },
+        { id = "faceMix", short = "F2", label = "Face Structure", name = "Structure Mix", kind = "faceBlend", field = "shapeMix", value = blend.shapeMix, minimum = 0, maximum = 1, step = 0.05 },
+        { id = "skinTone", short = "S1", label = "Skin Tone", name = "Skin Tone", kind = "faceBlend", field = "skinFirst", value = blend.skinFirst, minimum = 0, maximum = 45, step = 1 },
+        { id = "skinMix", short = "S2", label = "Skin Structure", name = "Skin Mix", kind = "faceBlend", field = "skinMix", value = blend.skinMix, minimum = 0, maximum = 1, step = 0.05 },
+        { id = "eyes", short = "E1", label = "Eye Color", name = "Eye Color", kind = "eyeColor", value = GetPedEyeColor(ped), minimum = 0, maximum = 8, step = 1 },
+        { id = "noseWidth", short = "N1", label = "Nose Width", name = "Nose Width", kind = "faceFeature", feature = 0, value = GetPedFaceFeature(ped, 0), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "noseHeight", short = "N2", label = "Nose Height", name = "Nose Height", kind = "faceFeature", feature = 1, value = GetPedFaceFeature(ped, 1), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "noseLength", short = "N3", label = "Nose Length", name = "Nose Length", kind = "faceFeature", feature = 2, value = GetPedFaceFeature(ped, 2), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "cheekHeight", short = "C1", label = "Cheek Height", name = "Cheek Height", kind = "faceFeature", feature = 8, value = GetPedFaceFeature(ped, 8), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "cheekWidth", short = "C2", label = "Cheek Width", name = "Cheek Width", kind = "faceFeature", feature = 9, value = GetPedFaceFeature(ped, 9), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "jawWidth", short = "J1", label = "Jaw Width", name = "Jaw Width", kind = "faceFeature", feature = 13, value = GetPedFaceFeature(ped, 13), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "chinLength", short = "J2", label = "Chin Length", name = "Chin Length", kind = "faceFeature", feature = 16, value = GetPedFaceFeature(ped, 16), minimum = -1, maximum = 1, step = 0.05 },
+        { id = "brows", short = "B1", label = "Eyebrows", name = "Eyebrow Style", kind = "overlay", overlay = 2, value = GetPedHeadOverlayValue(ped, 2), minimum = 0, maximum = math.max(GetNumHeadOverlayValues(2) - 1, 0), step = 1 },
+        { id = "beard", short = "B2", label = "Facial Hair", name = "Beard Style", kind = "overlay", overlay = 1, value = GetPedHeadOverlayValue(ped, 1), minimum = 0, maximum = math.max(GetNumHeadOverlayValues(1) - 1, 0), step = 1 },
+        { id = "makeup", short = "M1", label = "Makeup", name = "Makeup Style", kind = "overlay", overlay = 4, value = GetPedHeadOverlayValue(ped, 4), minimum = 0, maximum = math.max(GetNumHeadOverlayValues(4) - 1, 0), step = 1 },
+        { id = "hairStyle", short = "H1", label = "Hair Style", name = "Hair Style", kind = "hairStyle", value = GetPedDrawableVariation(ped, 2), minimum = 0, maximum = math.max(GetNumberOfPedDrawableVariations(ped, 2) - 1, 0), step = 1 },
+        { id = "hairColor", short = "H2", label = "Hair Color", name = "Hair Color", kind = "hairColor", value = GetPedHairColor(ped), minimum = 0, maximum = math.max(GetNumHairColors() - 1, 0), step = 1 }
+    }
+    return categories
+end
+
 local function clothingCategories(ped)
     local categories = {
         { id = "mask", short = "01", label = "Face Cover", name = "Mask", kind = "component", slot = 1 },
@@ -316,6 +371,40 @@ local function clothingCategories(ped)
     return categories
 end
 
+local function applyHeadBlend()
+    local values = {}
+    for _, item in ipairs(clothingItems) do
+        if item.kind == "faceBlend" then values[item.field] = item.value end
+    end
+    SetPedHeadBlendData(
+        PlayerPedId(), values.shapeFirst or 0, values.shapeSecond or 0, values.shapeThird or 0,
+        values.skinFirst or 0, values.skinSecond or 0, values.skinThird or 0,
+        values.shapeMix or 0.5, values.skinMix or 0.5, values.thirdMix or 0.0, false
+    )
+    if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) then
+        SetPedHeadBlendData(
+            clothingPreviewPed, values.shapeFirst or 0, values.shapeSecond or 0, values.shapeThird or 0,
+            values.skinFirst or 0, values.skinSecond or 0, values.skinThird or 0,
+            values.shapeMix or 0.5, values.skinMix or 0.5, values.thirdMix or 0.0, false
+        )
+    end
+end
+
+local function applyAppearanceItem(targetPed, item)
+    if not targetPed or not DoesEntityExist(targetPed) then return end
+    if item.kind == "faceFeature" then
+        SetPedFaceFeature(targetPed, item.feature, item.value)
+    elseif item.kind == "eyeColor" then
+        SetPedEyeColor(targetPed, item.value)
+    elseif item.kind == "overlay" then
+        SetPedHeadOverlay(targetPed, item.overlay, item.value, 1.0)
+    elseif item.kind == "hairStyle" then
+        SetPedComponentVariation(targetPed, 2, item.value, GetPedTextureVariation(targetPed, 2), 0)
+    elseif item.kind == "hairColor" then
+        SetPedHairColor(targetPed, item.value, item.value)
+    end
+end
+
 local function openCustomClothing()
     local ped = PlayerPedId()
     local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
@@ -330,13 +419,22 @@ local function openCustomClothing()
         SetModelAsNoLongerNeeded(model)
     end
     SetEntityVisible(ped, false, false)
-    clothingItems = clothingCategories(ped)
+    clothingItems = appearanceCategories(ped)
+    for _, item in ipairs(clothingCategories(ped)) do clothingItems[#clothingItems + 1] = item end
     clothingHeading = GetEntityHeading(ped)
     customClothingOpen = true
     createClothingPreview()
     SetNuiFocus(true, true)
     SendNUIMessage({ action = "clothingOpen", categories = clothingItems })
     if IsScreenFadedOut() then DoScreenFadeIn(250) end
+end
+
+local function continueFirstCharacter()
+    if Config.FirstCharacter.apartments.enabled and XSBridge.openApartments(activeCharacterData or activeCharacter) then
+        XSPed.begin(nil)
+        return
+    end
+    spawnAt(Config.Spawn.default, "default")
 end
 
 local function finishCustomClothing()
@@ -350,7 +448,9 @@ local function finishCustomClothing()
     FreezeEntityPosition(ped, false)
     SetNuiFocus(false, false)
     SendNUIMessage({ action = "clothingClose" })
-    openApartmentsAfterClothing()
+    if activeCharacterData then
+        continueFirstCharacter()
+    end
 end
 
 local function openCustomAfterApartment()
@@ -431,35 +531,28 @@ RegisterNetEvent('XS-MultiCharacter:client:loggedIn', function(citizenid, positi
     if isNew then
         waitingForClothing = false
         clothingHandledElsewhere = false
-        fadeOut()
         removeScene()
         local ped = PlayerPedId()
         SetEntityVisible(ped, true, false)
         FreezeEntityPosition(ped, false)
-        DoScreenFadeIn(450)
+        DoScreenFadeIn(100)
 
-        -- The stock apartment flow opens clothing after the apartment is made.
-        -- Starting either of those here would make the two menus overlap.
-        if Config.FirstCharacter.apartments.enabled
-            and (Config.FirstCharacter.clothing.custom == true
-                or Config.FirstCharacter.apartments.opensClothingAfterSelection ~= false)
-            and XSBridge.openApartments(activeCharacterData or activeCharacter) then
+        if Config.FirstCharacter.clothing.enabled and Config.FirstCharacter.clothing.custom == true then
+            waitingForClothing = true
+            openCustomClothing()
+            return
+        end
+
+        if Config.FirstCharacter.apartments.enabled and XSBridge.openApartments(activeCharacterData or activeCharacter) then
             XSPed.begin(nil)
-            if Config.FirstCharacter.clothing.custom == true then
-                waitingForClothing = true
-                openCustomAfterApartment()
-            end
             return
         end
 
         debugPrint('No apartment resource to hand the new character to, using the spawn and clothing fallback.')
         spawnAt(Config.Spawn.default, 'default')
-        if Config.FirstCharacter.clothing.enabled and (Config.FirstCharacter.clothing.custom == true or Config.FirstCharacter.clothing.mode ~= 'none') then
+        if Config.FirstCharacter.clothing.enabled and Config.FirstCharacter.clothing.mode ~= 'none' then
             waitingForClothing = true
             openClothingWhenClear()
-        else
-            waitingForClothing = true
-            openApartmentsAfterClothing()
         end
     else
         openSpawns(position, allowedSpawns)
@@ -475,33 +568,47 @@ RegisterNetEvent('XS-MultiCharacter:client:refresh', function()
 end)
 
 RegisterNUICallback("clothingChange", function(data, cb)
-    if not customClothingOpen or type(data) ~= "table" then cb("ok") return end
+    if not customClothingOpen or type(data) ~= "table" then cb({ ok = false }) return end
     local ped = PlayerPedId()
     for _, item in ipairs(clothingItems) do
         if item.id == data.id and item.kind == data.kind then
-            local minimum = item.kind == "prop" and -1 or 0
-            local drawable = math.max(minimum, math.min((item.drawables or 1) - 1, math.floor(tonumber(data.drawable) or 0)))
-            local textures = 1
-            if item.kind == "component" then
-                textures = math.max(GetNumberOfPedTextureVariations(ped, item.slot, drawable), 1)
-            elseif drawable >= 0 then
-                textures = math.max(GetNumberOfPedPropTextureVariations(ped, item.slot, drawable), 1)
-            end
-            local texture = math.max(0, math.min(textures - 1, math.floor(tonumber(data.texture) or 0)))
-            item.drawable, item.texture, item.textures = drawable, texture, textures
-            local function applyItem(targetPed)
-                if not targetPed or not DoesEntityExist(targetPed) then return end
+            if item.kind == "component" or item.kind == "prop" then
+                local minimum = item.kind == "prop" and -1 or 0
+                local drawable = math.max(minimum, math.min((item.drawables or 1) - 1, math.floor(tonumber(data.drawable) or 0)))
+                local textures = 1
                 if item.kind == "component" then
-                    SetPedComponentVariation(targetPed, item.slot, drawable, texture, 0)
-                elseif drawable < 0 then
-                    ClearPedProp(targetPed, item.slot)
-                else
-                    SetPedPropIndex(targetPed, item.slot, drawable, texture, true)
+                    textures = math.max(GetNumberOfPedTextureVariations(ped, item.slot, drawable), 1)
+                elseif drawable >= 0 then
+                    textures = math.max(GetNumberOfPedPropTextureVariations(ped, item.slot, drawable), 1)
                 end
+                local texture = math.max(0, math.min(textures - 1, math.floor(tonumber(data.texture) or 0)))
+                item.drawable, item.texture, item.textures = drawable, texture, textures
+                local function applyItem(targetPed)
+                    if not targetPed or not DoesEntityExist(targetPed) then return end
+                    if item.kind == "component" then
+                        SetPedComponentVariation(targetPed, item.slot, drawable, texture, 0)
+                    elseif drawable < 0 then
+                        ClearPedProp(targetPed, item.slot)
+                    else
+                        SetPedPropIndex(targetPed, item.slot, drawable, texture, true)
+                    end
+                end
+                applyItem(ped)
+                applyItem(clothingPreviewPed)
+                cb({ ok = true, id = item.id, kind = item.kind, drawable = item.drawable, texture = item.texture, textures = item.textures })
+                return
             end
-            applyItem(ped)
-            applyItem(clothingPreviewPed)
-            cb({ ok = true, id = item.id, drawable = item.drawable, texture = item.texture, textures = item.textures })
+
+            local value = tonumber(data.value) or item.value or item.minimum or 0
+            value = math.max(item.minimum or 0, math.min(item.maximum or value, value))
+            item.value = value
+            if item.kind == "faceBlend" then
+                applyHeadBlend()
+            else
+                applyAppearanceItem(ped, item)
+                applyAppearanceItem(clothingPreviewPed, item)
+            end
+            cb({ ok = true, id = item.id, kind = item.kind, value = item.value })
             return
         end
     end
@@ -582,6 +689,5 @@ end)
 
 CreateThread(function()
     while not NetworkIsSessionStarted() do Wait(100) end
-    Wait(100)
     openCharacters()
 end)
