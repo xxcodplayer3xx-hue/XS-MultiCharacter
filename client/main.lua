@@ -6,7 +6,81 @@ local openingClothing, clothingHandledElsewhere = false, false
 local customClothingOpen = false
 local clothingItems = {}
 local clothingHeading = 0.0
+local clothingPreviewPed, clothingPreviewCam
+local requestModel
 local previewToken = 0
+local clothingPreviewToken = 0
+
+local function clothingPreviewSettings()
+    return Config.Client.ClothingPreview or {
+        coords = Config.Client.Scene.coords,
+        camera = Config.Client.Scene.camera,
+        cameraLookAt = Config.Client.Scene.cameraLookAt,
+        fov = 42.0
+    }
+end
+
+local function destroyClothingPreview()
+    clothingPreviewToken = clothingPreviewToken + 1
+    if clothingPreviewCam then
+        RenderScriptCams(false, true, 250, true, true)
+        if DoesCamExist(clothingPreviewCam) then DestroyCam(clothingPreviewCam, false) end
+        clothingPreviewCam = nil
+    end
+    if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) then DeleteEntity(clothingPreviewPed) end
+    clothingPreviewPed = nil
+    ClearFocus()
+end
+
+local function createClothingPreview()
+    destroyClothingPreview()
+    local token = clothingPreviewToken
+    local playerPed = PlayerPedId()
+    local settings = clothingPreviewSettings()
+    local preview = ClonePed(playerPed, false, false, true)
+
+    if not preview or preview == 0 or not DoesEntityExist(preview) then
+        local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
+        local model = XSAppearance.model(nil, gender)
+        if not requestModel(model) then return false end
+        preview = CreatePed(2, model, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, settings.coords.w, false, true)
+        SetPedDefaultComponentVariation(preview)
+        SetModelAsNoLongerNeeded(model)
+    end
+
+    if token ~= clothingPreviewToken or not DoesEntityExist(preview) then
+        if DoesEntityExist(preview) then DeleteEntity(preview) end
+        return false
+    end
+
+    clothingPreviewPed = preview
+    SetEntityVisible(preview, true, false)
+    SetEntityLocallyVisible(preview)
+    SetEntityAlpha(preview, 255, false)
+    SetEntityCoordsNoOffset(preview, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, false, false, false)
+    SetEntityHeading(preview, settings.coords.w)
+    SetEntityAsMissionEntity(preview, true, true)
+    SetEntityCollision(preview, false, false)
+    SetEntityInvincible(preview, true)
+    SetEntityCanBeDamaged(preview, false)
+    SetBlockingOfNonTemporaryEvents(preview, true)
+    SetPedCanBeTargetted(preview, false)
+    NetworkSetEntityInvisibleToNetwork(preview, true)
+    FreezeEntityPosition(preview, true)
+    XSAnimation.play(preview)
+
+    clothingPreviewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    SetCamCoord(clothingPreviewCam, settings.camera.x, settings.camera.y, settings.camera.z)
+    PointCamAtCoord(clothingPreviewCam, settings.cameraLookAt.x, settings.cameraLookAt.y, settings.cameraLookAt.z)
+    SetCamFov(clothingPreviewCam, settings.fov or 42.0)
+    XSSceneEffects.applyCamera(clothingPreviewCam)
+    SetCamActive(clothingPreviewCam, true)
+    SetFocusPosAndVel(settings.coords.x, settings.coords.y, settings.coords.z, 0.0, 0.0, 0.0)
+    RenderScriptCams(true, false, 0, true, true)
+    SetEntityVisible(playerPed, false, false)
+    FreezeEntityPosition(playerPed, true)
+    return true
+end
 
 if not XSValidation.print('client') then return end
 
@@ -45,7 +119,7 @@ local function removeScene()
     XSSceneEffects.leave()
 end
 
-local function requestModel(model)
+requestModel = function(model)
     RequestModel(model)
     local deadline = GetGameTimer() + 10000
     while not HasModelLoaded(model) and GetGameTimer() < deadline do Wait(0) end
@@ -95,7 +169,6 @@ local function createCamera(coords, lookAt, interpolate)
 end
 
 local function setupScene()
-    fadeOut()
     ShutdownLoadingScreen()
     ShutdownLoadingScreenNui()
     NetworkStartSoloTutorialSession()
@@ -103,13 +176,16 @@ local function setupScene()
     XSWeather.enterScene()
     XSSceneEffects.enter()
     local scene = Config.Client.Scene
-    SetEntityCoords(PlayerPedId(), scene.coords.x, scene.coords.y, scene.coords.z - 5.0, false, false, false, false)
-    FreezeEntityPosition(PlayerPedId(), true)
-    SetEntityVisible(PlayerPedId(), false, false)
-    showPed(nil, 0)
+    local playerPed = PlayerPedId()
+    SetEntityCoords(playerPed, scene.coords.x, scene.coords.y, scene.coords.z - 5.0, false, false, false, false)
+    FreezeEntityPosition(playerPed, true)
+    SetEntityVisible(playerPed, false, false)
     createCamera(scene.camera, scene.cameraLookAt, false)
     XSSceneEffects.startOrbit(previewCam, scene.camera, scene.cameraLookAt)
-    DoScreenFadeIn(500)
+    DoScreenFadeIn(250)
+    CreateThread(function()
+        showPed(nil, 0)
+    end)
 end
 
 local function openCharacters()
@@ -242,12 +318,25 @@ end
 
 local function openCustomClothing()
     local ped = PlayerPedId()
+    local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
+    local model = XSAppearance.model(nil, gender)
+    if GetEntityModel(ped) ~= model and requestModel(model) then
+        local coords, heading = GetEntityCoords(ped), GetEntityHeading(ped)
+        SetPlayerModel(PlayerId(), model)
+        ped = PlayerPedId()
+        SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false, false)
+        SetEntityHeading(ped, heading)
+        SetPedDefaultComponentVariation(ped)
+        SetModelAsNoLongerNeeded(model)
+    end
+    SetEntityVisible(ped, false, false)
     clothingItems = clothingCategories(ped)
     clothingHeading = GetEntityHeading(ped)
     customClothingOpen = true
+    createClothingPreview()
     SetNuiFocus(true, true)
     SendNUIMessage({ action = "clothingOpen", categories = clothingItems })
-    if IsScreenFadedOut() then DoScreenFadeIn(350) end
+    if IsScreenFadedOut() then DoScreenFadeIn(250) end
 end
 
 local function finishCustomClothing()
@@ -255,6 +344,10 @@ local function finishCustomClothing()
     customClothingOpen = false
     waitingForClothing = false
     XSAppearance.saveCurrent()
+    destroyClothingPreview()
+    local ped = PlayerPedId()
+    SetEntityVisible(ped, true, false)
+    FreezeEntityPosition(ped, false)
     SetNuiFocus(false, false)
     SendNUIMessage({ action = "clothingClose" })
     openApartmentsAfterClothing()
@@ -396,13 +489,18 @@ RegisterNUICallback("clothingChange", function(data, cb)
             end
             local texture = math.max(0, math.min(textures - 1, math.floor(tonumber(data.texture) or 0)))
             item.drawable, item.texture, item.textures = drawable, texture, textures
-            if item.kind == "component" then
-                SetPedComponentVariation(ped, item.slot, drawable, texture, 0)
-            elseif drawable < 0 then
-                ClearPedProp(ped, item.slot)
-            else
-                SetPedPropIndex(ped, item.slot, drawable, texture, true)
+            local function applyItem(targetPed)
+                if not targetPed or not DoesEntityExist(targetPed) then return end
+                if item.kind == "component" then
+                    SetPedComponentVariation(targetPed, item.slot, drawable, texture, 0)
+                elseif drawable < 0 then
+                    ClearPedProp(targetPed, item.slot)
+                else
+                    SetPedPropIndex(targetPed, item.slot, drawable, texture, true)
+                end
             end
+            applyItem(ped)
+            applyItem(clothingPreviewPed)
             cb({ ok = true, id = item.id, drawable = item.drawable, texture = item.texture, textures = item.textures })
             return
         end
@@ -413,7 +511,9 @@ end)
 RegisterNUICallback("clothingRotate", function(data, cb)
     if customClothingOpen then
         clothingHeading = clothingHeading + (tonumber(data.direction) or 0) * 12.0
-        SetEntityHeading(PlayerPedId(), clothingHeading % 360.0)
+        if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) then
+            SetEntityHeading(clothingPreviewPed, clothingHeading % 360.0)
+        end
     end
     cb("ok")
 end)
@@ -482,6 +582,6 @@ end)
 
 CreateThread(function()
     while not NetworkIsSessionStarted() do Wait(100) end
-    Wait(500)
+    Wait(100)
     openCharacters()
 end)

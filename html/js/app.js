@@ -69,6 +69,7 @@ function openClothing(data) {
     $('#detailView').classList.add('hidden');
     $('#spawnView').classList.add('hidden');
     $('#app').classList.remove('hidden');
+    $('#app').classList.add('clothing-active');
     $('#clothingView').classList.remove('hidden');
     $('#clothingCategories').innerHTML = clothingState.categories.map((category, index) => `<button type="button" class="clothing-category ${index === 0 ? 'active' : ''}" data-clothing-category="${escapeHtml(category.id)}"><span>${escapeHtml(category.short)}</span><b>${escapeHtml(category.label)}</b></button>`).join('');
     renderClothing();
@@ -288,6 +289,7 @@ window.addEventListener('message', ({ data }) => {
     if (data.action === 'clothingOpen') openClothing(data);
     if (data.action === 'clothingClose') {
         $('#clothingView').classList.add('hidden');
+        $('#app').classList.remove('clothing-active');
         $('#app').classList.add('hidden');
     }
     if (data.action === 'adminSlots') {
@@ -306,7 +308,10 @@ window.addEventListener('message', ({ data }) => {
         $('#adminView').classList.add('hidden');
         $('#app').classList.add('hidden');
     }
-    if (data.action === 'close') $('#app').classList.add('hidden');
+    if (data.action === 'close') {
+        $('#app').classList.remove('clothing-active');
+        $('#app').classList.add('hidden');
+    }
 });
 
 $('#createForm').onsubmit = (event) => {

@@ -11,6 +11,13 @@ Config.Client.Scene = {
     cameraTransitionMs = 700
 }
 
+Config.Client.ClothingPreview = {
+    coords = vec4(-811.7346, 175.2027, 76.7454, 107.3739),
+    camera = vec3(-813.5, 174.0, 78.0),
+    cameraLookAt = vec3(-811.7346, 175.2027, 76.7454),
+    fov = 42.0
+}
+
 Config.Client.SceneEffects = {
     timecycle = 'hud_def_blur', -- false to leave the scene untreated
     timecycleStrength = 0.35,
