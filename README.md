@@ -322,7 +322,7 @@ The default flow is:
 Identity -> XS Style Lab -> Apartment or Spawn
 ```
 
-The custom Style Lab is enabled by default in `Config.FirstCharacter.clothing.custom`. It opens immediately after a new character is created, before the apartment or spawn flow. The player is shown in a dedicated full-body preview camera while every change is applied to the real freemode ped and the visible mannequin. The editor includes clothing, props, textures, face blend, skin tone, eye color, facial features, hair, eyebrows, beard, and makeup controls. The installed appearance resource is still used to save the completed look.
+The custom Style Lab is enabled by default in `Config.FirstCharacter.clothing.custom`. It opens immediately after a new character is created, before the apartment or spawn flow. It uses a separate local freemode mannequin on an explicit open-air floor, while the real player remains hidden and protected from interior collision. Every change is applied to both the player and the visible mannequin. The editor includes clothing, props, textures, face blend, skin tone, eye color, facial features, hair, eyebrows, beard, and makeup controls. The installed appearance resource is still used to save the completed look.
 
 Set `custom = false` to use the configured external appearance menu instead. Auto only knows `qbx_apartments` and `qb-apartments`. If yours is a renamed fork, put its name in `Config.FirstCharacter.apartments.resource` so the handoff still happens.
 

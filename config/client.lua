@@ -1,13 +1,12 @@
 Config.Client = {}
 
 Config.Client.Scene = {
-    -- Open, collision-safe ground used for both the character preview and editor.
-    -- The previous coordinates were on a rooftop, which could hide the ped inside
-    -- the roof when collision streaming returned a different surface.
-    coords = vec4(195.17, -933.77, 30.69, 144.5),
-    floorZ = 30.69,
-    camera = vec3(205.30, -940.40, 37.20),
-    cameraLookAt = vec3(195.17, -933.77, 30.69),
+    -- Use an open airport runway apron for previews. The floor is explicit so a
+    -- streamed roof, balcony, or interior shell cannot become the ground.
+    coords = vec4(-1336.00, -3044.00, 13.94, 60.0),
+    floorZ = 13.94,
+    camera = vec3(-1322.00, -3060.00, 21.50),
+    cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
     -- Standard freemode roleplay bodies used by most Qbox/QB servers.
     maleModel = `mp_m_freemode_01`,
     femaleModel = `mp_f_freemode_01`,
@@ -17,13 +16,12 @@ Config.Client.Scene = {
 }
 
 Config.Client.ClothingPreview = {
-    -- Keep this on the same open ground as the character scene. Do not use a
-    -- rooftop or interior shell here unless a matching floorZ is supplied.
-    coords = vec4(195.17, -933.77, 30.69, 144.5),
-    floorZ = 30.69,
-    camera = vec3(205.30, -940.40, 37.20),
-    cameraLookAt = vec3(195.17, -933.77, 31.65),
-    fov = 48.0
+    -- Keep the mannequin on the same open-air apron as the character preview.
+    coords = vec4(-1336.00, -3044.00, 13.94, 60.0),
+    floorZ = 13.94,
+    camera = vec3(-1322.00, -3060.00, 21.50),
+    cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
+    fov = 50.0
 }
 
 Config.Client.SceneEffects = {

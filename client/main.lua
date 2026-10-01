@@ -46,6 +46,7 @@ local function destroyClothingPreview()
         clothingPreviewCam = nil
     end
     if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) and not clothingPreviewUsesPlayer then
+        SetEntityAsMissionEntity(clothingPreviewPed, true, true)
         DeleteEntity(clothingPreviewPed)
     end
     local playerPed = PlayerPedId()
@@ -55,6 +56,9 @@ local function destroyClothingPreview()
         ResetEntityAlpha(playerPed)
         SetEntityCollision(playerPed, true, true)
         SetEntityHasGravity(playerPed, true)
+        SetEntityInvincible(playerPed, false)
+        SetEntityCanBeDamaged(playerPed, true)
+        SetPedCanBeTargetted(playerPed, true)
         SetPedCanRagdoll(playerPed, true)
     end
     clothingPreviewPed = nil
@@ -138,50 +142,73 @@ local function createClothingPreview()
 
     clearClothingVisualEffects()
     local floorZ = editorFloor(settings.coords, settings.floorZ)
-    SetEntityCoordsNoOffset(playerPed, settings.coords.x, settings.coords.y, floorZ + 0.02, false, false, false)
+    local previewX, previewY, previewZ = settings.coords.x, settings.coords.y, floorZ + 0.02
+
+    -- Keep the real player hidden and use a separate local mannequin. This stops
+    -- apartment/interior collision from moving the entity being edited into a roof.
+    SetEntityCoordsNoOffset(playerPed, previewX, previewY, previewZ, false, false, false)
     SetEntityHeading(playerPed, settings.coords.w or 0.0)
+    SetEntityVisible(playerPed, false, false)
+    SetEntityLocallyInvisible(playerPed)
     SetEntityVelocity(playerPed, 0.0, 0.0, 0.0)
-    SetEntityCollision(playerPed, true, true)
-    SetEntityLoadCollisionFlag(playerPed, true)
+    SetEntityCollision(playerPed, false, false)
     SetEntityHasGravity(playerPed, false)
-    SetEntityVisible(playerPed, true, false)
-    SetEntityLocallyVisible(playerPed)
-    ResetEntityAlpha(playerPed)
-    SetEntityAlpha(playerPed, 255, false)
-    SetEntityInvincible(playerPed, true)
-    SetEntityCanBeDamaged(playerPed, false)
-    SetBlockingOfNonTemporaryEvents(playerPed, true)
-    SetPedCanBeTargetted(playerPed, false)
-    SetPedCanRagdoll(playerPed, false)
     FreezeEntityPosition(playerPed, true)
 
-    if token ~= clothingPreviewToken or not DoesEntityExist(playerPed) then return false end
+    local mannequin = CreatePed(4, model, previewX, previewY, previewZ, settings.coords.w or 0.0, false, false)
+    if not mannequin or not DoesEntityExist(mannequin) then
+        print("[XS-MultiCharacter] Unable to create the clothing preview mannequin")
+        return false
+    end
 
-    -- Use the real player ped as the preview so the exact entity being edited is visible.
-    clothingPreviewPed = playerPed
-    clothingPreviewUsesPlayer = true
+    if token ~= clothingPreviewToken then
+        DeleteEntity(mannequin)
+        return false
+    end
+
+    clothingPreviewPed = mannequin
+    clothingPreviewUsesPlayer = false
+    SetEntityAsMissionEntity(mannequin, true, true)
+    SetEntityCollision(mannequin, false, false)
+    SetEntityHasGravity(mannequin, false)
+    SetEntityInvincible(mannequin, true)
+    SetEntityCanBeDamaged(mannequin, false)
+    SetEntityVisible(mannequin, true, false)
+    SetEntityLocallyVisible(mannequin)
+    SetEntityAlwaysPrerender(mannequin, true)
+    ResetEntityAlpha(mannequin)
+    SetEntityAlpha(mannequin, 255, false)
+    SetBlockingOfNonTemporaryEvents(mannequin, true)
+    SetPedCanBeTargetted(mannequin, false)
+    SetPedCanRagdoll(mannequin, false)
+    FreezeEntityPosition(mannequin, true)
+    SetPedDefaultComponentVariation(mannequin)
+    copyPedAppearance(playerPed, mannequin)
 
     local cameraPosition = settings.camera
     local cameraLookAt = settings.cameraLookAt
     clothingPreviewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     SetCamCoord(clothingPreviewCam, cameraPosition.x, cameraPosition.y, cameraPosition.z)
     PointCamAtCoord(clothingPreviewCam, cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)
-    SetCamFov(clothingPreviewCam, settings.fov or 48.0)
+    SetCamFov(clothingPreviewCam, settings.fov or 50.0)
     SetCamActive(clothingPreviewCam, true)
-    SetFocusEntity(playerPed)
+    SetFocusPosAndVel(previewX, previewY, previewZ, 0.0, 0.0, 0.0)
     RenderScriptCams(true, false, 0, true, true)
 
     CreateThread(function()
-        while customClothingOpen and clothingPreviewPed == playerPed and DoesEntityExist(playerPed) do
+        while customClothingOpen and clothingPreviewPed == mannequin and DoesEntityExist(mannequin) do
             Wait(0)
             clearClothingVisualEffects()
-            SetEntityVisible(playerPed, true, false)
-            SetEntityLocallyVisible(playerPed)
-            ResetEntityAlpha(playerPed)
-            SetEntityAlpha(playerPed, 255, false)
-            SetEntityCollision(playerPed, true, true)
-            SetEntityHasGravity(playerPed, false)
-            FreezeEntityPosition(playerPed, true)
+            SetEntityVisible(mannequin, true, false)
+            SetEntityLocallyVisible(mannequin)
+            SetEntityAlwaysPrerender(mannequin, true)
+            ResetEntityAlpha(mannequin)
+            SetEntityAlpha(mannequin, 255, false)
+            SetEntityCollision(mannequin, false, false)
+            SetEntityHasGravity(mannequin, false)
+            FreezeEntityPosition(mannequin, true)
+            SetEntityVisible(playerPed, false, false)
+            SetEntityLocallyInvisible(playerPed)
         end
     end)
     return true
@@ -242,13 +269,16 @@ local function showPed(character, fallbackGender)
     previewToken = token
     local gender = character and character.charinfo and character.charinfo.gender or fallbackGender or 0
     local model = XSAppearance.model(character and character.appearance, gender)
-    if not requestModel(model) or token ~= previewToken then return end
+    if not model or not requestModel(model) or token ~= previewToken then
+        print("[XS-MultiCharacter] Selected character preview model could not be loaded")
+        return
+    end
 
     local pos = Config.Client.Scene.coords
-    local floorZ = sceneFloor(pos, Config.Client.Scene.floorZ)
-    RequestCollisionAtCoord(pos.x, pos.y, floorZ)
-    SetFocusPosAndVel(pos.x, pos.y, floorZ, 0.0, 0.0, 0.0)
-    previewPed = CreatePed(2, model, pos.x, pos.y, floorZ + 0.02, pos.w, false, false)
+    local floorZ = Config.Client.Scene.floorZ or pos.z
+    local previewZ = floorZ + 0.03
+    SetFocusPosAndVel(pos.x, pos.y, previewZ, 0.0, 0.0, 0.0)
+    previewPed = CreatePed(4, model, pos.x, pos.y, previewZ, pos.w or 0.0, false, false)
     if not previewPed or not DoesEntityExist(previewPed) then
         SetModelAsNoLongerNeeded(model)
         print("[XS-MultiCharacter] Unable to create the selected character preview ped")
@@ -256,26 +286,46 @@ local function showPed(character, fallbackGender)
     end
 
     SetEntityAsMissionEntity(previewPed, true, true)
-    SetEntityCoordsNoOffset(previewPed, pos.x, pos.y, floorZ + 0.02, false, false, false)
-    SetEntityLoadCollisionFlag(previewPed, true)
+    SetEntityCoordsNoOffset(previewPed, pos.x, pos.y, previewZ, false, false, false)
     SetEntityHeading(previewPed, pos.w or 0.0)
+    SetEntityLoadCollisionFlag(previewPed, true)
     SetEntityInvincible(previewPed, true)
     SetEntityCanBeDamaged(previewPed, false)
     SetEntityCollision(previewPed, false, false)
+    SetEntityHasGravity(previewPed, false)
     SetEntityVisible(previewPed, true, false)
     SetEntityLocallyVisible(previewPed)
+    SetEntityAlwaysPrerender(previewPed, true)
     ResetEntityAlpha(previewPed)
     SetEntityAlpha(previewPed, 255, false)
-    NetworkSetEntityInvisibleToNetwork(previewPed, true)
     FreezeEntityPosition(previewPed, true)
     SetBlockingOfNonTemporaryEvents(previewPed, true)
     SetPedCanRagdoll(previewPed, false)
     SetPedDefaultComponentVariation(previewPed)
-    if character and character.appearance then XSAppearance.apply(previewPed, character.appearance) end
+    if character and character.appearance then
+        XSAppearance.apply(previewPed, character.appearance)
+    end
     local jobName = character and character.job and character.job.name
     XSAnimation.play(previewPed, jobName)
+    SetEntityVisible(previewPed, true, false)
+    SetEntityLocallyVisible(previewPed)
+    SetEntityAlwaysPrerender(previewPed, true)
+    ResetEntityAlpha(previewPed)
+    SetEntityAlpha(previewPed, 255, false)
     SetModelAsNoLongerNeeded(model)
-    SetFocusEntity(previewPed)
+    CreateThread(function()
+        Wait(250)
+        if selectorOpen and token == previewToken and DoesEntityExist(previewPed) then
+            if character and character.appearance then
+                XSAppearance.apply(previewPed, character.appearance)
+            end
+            SetEntityVisible(previewPed, true, false)
+            SetEntityLocallyVisible(previewPed)
+            ResetEntityAlpha(previewPed)
+            SetEntityAlpha(previewPed, 255, false)
+        end
+    end)
+    SetFocusPosAndVel(pos.x, pos.y, previewZ, 0.0, 0.0, 0.0)
     TriggerEvent('XS-MultiCharacter:client:characterPreviewed', character, previewPed)
 
     CreateThread(function()
@@ -285,6 +335,9 @@ local function showPed(character, fallbackGender)
             SetEntityLocallyVisible(previewPed)
             ResetEntityAlpha(previewPed)
             SetEntityAlpha(previewPed, 255, false)
+            SetEntityCollision(previewPed, false, false)
+            SetEntityHasGravity(previewPed, false)
+            SetEntityInvincible(previewPed, true)
             FreezeEntityPosition(previewPed, true)
         end
     end)
@@ -573,7 +626,14 @@ local function openCustomClothing()
         SetEntityVisible(ped, true, false)
         SetEntityLocallyVisible(ped)
         ResetEntityAlpha(ped)
+        SetEntityCollision(ped, true, true)
+        SetEntityHasGravity(ped, true)
+        SetEntityInvincible(ped, false)
+        SetEntityCanBeDamaged(ped, true)
+        SetPedCanBeTargetted(ped, true)
+        SetPedCanRagdoll(ped, true)
         FreezeEntityPosition(ped, false)
+        ClearFocus()
         SetNuiFocus(false, false)
         SendNUIMessage({ action = "clothingClose" })
         print("[XS-MultiCharacter] Style Lab could not load a visible preview mannequin")
