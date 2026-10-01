@@ -34,7 +34,7 @@ local function clothingPreviewSettings()
         coords = Config.Client.Scene.coords,
         camera = Config.Client.Scene.camera,
         cameraLookAt = Config.Client.Scene.cameraLookAt,
-        fov = 42.0
+        fov = 40.0
     }
 end
 
