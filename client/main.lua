@@ -11,18 +11,20 @@ local clothingPreviewUsesPlayer = false
 local requestModel
 local previewToken = 0
 
-local function sceneFloor(coords)
+local function sceneFloor(coords, configuredFloorZ)
+    if configuredFloorZ then return configuredFloorZ end
     RequestCollisionAtCoord(coords.x, coords.y, coords.z)
     local found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 2.0, false)
     if found then return groundZ end
     return coords.z
 end
 
-local function placeOnSceneFloor(entity, coords)
+local function placeOnSceneFloor(entity, coords, configuredFloorZ)
     if not entity or not DoesEntityExist(entity) then return end
-    local floorZ = sceneFloor(coords)
-    SetEntityCoordsNoOffset(entity, coords.x, coords.y, floorZ, false, false, false)
+    local floorZ = sceneFloor(coords, configuredFloorZ)
+    SetEntityCoordsNoOffset(entity, coords.x, coords.y, floorZ + 0.02, false, false, false)
     SetEntityHeading(entity, coords.w or 0.0)
+    SetEntityVelocity(entity, 0.0, 0.0, 0.0)
     SetEntityLoadCollisionFlag(entity, true)
 end
 local clothingPreviewToken = 0
@@ -51,6 +53,7 @@ local function destroyClothingPreview()
         SetEntityVisible(playerPed, true, false)
         SetEntityLocallyVisible(playerPed)
         ResetEntityAlpha(playerPed)
+        SetEntityCollision(playerPed, true, true)
         SetEntityHasGravity(playerPed, true)
         SetPedCanRagdoll(playerPed, true)
     end
@@ -105,13 +108,16 @@ local function clearClothingVisualEffects()
     StopGameplayCamShaking(true)
 end
 
-local function editorFloor(coords)
+local function editorFloor(coords, configuredFloorZ)
+    -- An explicit floor is safer than GetGroundZFor_3dCoord at locations with
+    -- roofs, balconies, or streamed interior shells above the player.
+    if configuredFloorZ then return configuredFloorZ end
     RequestCollisionAtCoord(coords.x, coords.y, coords.z)
     local deadline = GetGameTimer() + 2500
     local found, groundZ
     repeat
-        RequestCollisionAtCoord(coords.x, coords.y, coords.z + 25.0)
-        found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 25.0, false)
+        RequestCollisionAtCoord(coords.x, coords.y, coords.z + 5.0)
+        found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 5.0, false)
         if not found then Wait(0) end
     until found or GetGameTimer() >= deadline
 
@@ -131,7 +137,7 @@ local function createClothingPreview()
     end
 
     clearClothingVisualEffects()
-    local floorZ = editorFloor(settings.coords)
+    local floorZ = editorFloor(settings.coords, settings.floorZ)
     SetEntityCoordsNoOffset(playerPed, settings.coords.x, settings.coords.y, floorZ + 0.02, false, false, false)
     SetEntityHeading(playerPed, settings.coords.w or 0.0)
     SetEntityVelocity(playerPed, 0.0, 0.0, 0.0)
@@ -155,8 +161,8 @@ local function createClothingPreview()
     clothingPreviewPed = playerPed
     clothingPreviewUsesPlayer = true
 
-    local cameraPosition = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 4.8, 1.35)
-    local cameraLookAt = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 0.0, 0.95)
+    local cameraPosition = settings.camera
+    local cameraLookAt = settings.cameraLookAt
     clothingPreviewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     SetCamCoord(clothingPreviewCam, cameraPosition.x, cameraPosition.y, cameraPosition.z)
     PointCamAtCoord(clothingPreviewCam, cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)
@@ -194,8 +200,12 @@ end
 
 local function destroyPreviewPed()
     previewToken = previewToken + 1
-    if previewPed and DoesEntityExist(previewPed) then DeleteEntity(previewPed) end
+    if previewPed and DoesEntityExist(previewPed) then
+        SetEntityAsMissionEntity(previewPed, true, true)
+        DeleteEntity(previewPed)
+    end
     previewPed = nil
+    ClearFocus()
 end
 
 local function destroyCamera(transition)
@@ -233,17 +243,51 @@ local function showPed(character, fallbackGender)
     local gender = character and character.charinfo and character.charinfo.gender or fallbackGender or 0
     local model = XSAppearance.model(character and character.appearance, gender)
     if not requestModel(model) or token ~= previewToken then return end
+
     local pos = Config.Client.Scene.coords
-    previewPed = CreatePed(2, model, pos.x, pos.y, sceneFloor(pos), pos.w, false, true)
+    local floorZ = sceneFloor(pos, Config.Client.Scene.floorZ)
+    RequestCollisionAtCoord(pos.x, pos.y, floorZ)
+    SetFocusPosAndVel(pos.x, pos.y, floorZ, 0.0, 0.0, 0.0)
+    previewPed = CreatePed(2, model, pos.x, pos.y, floorZ + 0.02, pos.w, false, false)
+    if not previewPed or not DoesEntityExist(previewPed) then
+        SetModelAsNoLongerNeeded(model)
+        print("[XS-MultiCharacter] Unable to create the selected character preview ped")
+        return
+    end
+
+    SetEntityAsMissionEntity(previewPed, true, true)
+    SetEntityCoordsNoOffset(previewPed, pos.x, pos.y, floorZ + 0.02, false, false, false)
+    SetEntityLoadCollisionFlag(previewPed, true)
+    SetEntityHeading(previewPed, pos.w or 0.0)
     SetEntityInvincible(previewPed, true)
+    SetEntityCanBeDamaged(previewPed, false)
+    SetEntityCollision(previewPed, false, false)
+    SetEntityVisible(previewPed, true, false)
+    SetEntityLocallyVisible(previewPed)
+    ResetEntityAlpha(previewPed)
+    SetEntityAlpha(previewPed, 255, false)
+    NetworkSetEntityInvisibleToNetwork(previewPed, true)
     FreezeEntityPosition(previewPed, true)
     SetBlockingOfNonTemporaryEvents(previewPed, true)
+    SetPedCanRagdoll(previewPed, false)
     SetPedDefaultComponentVariation(previewPed)
     if character and character.appearance then XSAppearance.apply(previewPed, character.appearance) end
     local jobName = character and character.job and character.job.name
     XSAnimation.play(previewPed, jobName)
     SetModelAsNoLongerNeeded(model)
+    SetFocusEntity(previewPed)
     TriggerEvent('XS-MultiCharacter:client:characterPreviewed', character, previewPed)
+
+    CreateThread(function()
+        while selectorOpen and token == previewToken and DoesEntityExist(previewPed) do
+            Wait(0)
+            SetEntityVisible(previewPed, true, false)
+            SetEntityLocallyVisible(previewPed)
+            ResetEntityAlpha(previewPed)
+            SetEntityAlpha(previewPed, 255, false)
+            FreezeEntityPosition(previewPed, true)
+        end
+    end)
 end
 
 local function createCamera(coords, lookAt, interpolate)
@@ -276,7 +320,7 @@ local function setupScene()
     XSSceneEffects.enter()
     local scene = Config.Client.Scene
     local playerPed = PlayerPedId()
-    placeOnSceneFloor(playerPed, scene.coords)
+    placeOnSceneFloor(playerPed, scene.coords, scene.floorZ)
     SetEntityCollision(playerPed, true, true)
     FreezeEntityPosition(playerPed, true)
     SetEntityVisible(playerPed, false, false)
@@ -511,7 +555,7 @@ local function openCustomClothing()
         SetPedDefaultComponentVariation(ped)
         SetModelAsNoLongerNeeded(model)
     end
-    placeOnSceneFloor(ped, settings.coords)
+    placeOnSceneFloor(ped, settings.coords, settings.floorZ)
     SetEntityCollision(ped, true, true)
     FreezeEntityPosition(ped, true)
     SetEntityVisible(ped, true, false)
