@@ -14,20 +14,20 @@ Config.Client.Scene = {
 
 Config.Client.ClothingPreview = {
     coords = vec4(-811.7346, 175.2027, 76.7454, 107.3739),
-    -- Keep enough distance to show the complete freemode ped, not only the feet.
-    camera = vec3(-815.2, 172.8, 78.8),
-    cameraLookAt = vec3(-811.7346, 175.2027, 77.65),
+    -- A neutral full-body framing for the freemode roleplay mannequin.
+    camera = vec3(-816.2, 171.8, 78.35),
+    cameraLookAt = vec3(-811.7346, 175.2027, 77.05),
     fov = 48.0
 }
 
 Config.Client.SceneEffects = {
-    timecycle = 'hud_def_blur', -- false to leave the scene untreated
-    timecycleStrength = 0.35,
+    timecycle = false, -- keep the clothing editor background clear
+    timecycleStrength = 0.0,
     depthOfField = {
-        enabled = true,
+        enabled = false,
         near = 0.5,
         far = 2.8,
-        strength = 0.65
+        strength = 0.0
     },
     orbit = {
         enabled = true,

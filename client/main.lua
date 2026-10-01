@@ -7,6 +7,7 @@ local customClothingOpen = false
 local clothingItems = {}
 local clothingHeading = 0.0
 local clothingPreviewPed, clothingPreviewCam
+local clothingPreviewUsesPlayer = false
 local requestModel
 local previewToken = 0
 
@@ -42,8 +43,11 @@ local function destroyClothingPreview()
         if DoesCamExist(clothingPreviewCam) then DestroyCam(clothingPreviewCam, false) end
         clothingPreviewCam = nil
     end
-    if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) then DeleteEntity(clothingPreviewPed) end
+    if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) and not clothingPreviewUsesPlayer then
+        DeleteEntity(clothingPreviewPed)
+    end
     clothingPreviewPed = nil
+    clothingPreviewUsesPlayer = false
     ClearFocus()
 end
 
@@ -52,54 +56,34 @@ local function createClothingPreview()
     local token = clothingPreviewToken
     local playerPed = PlayerPedId()
     local settings = clothingPreviewSettings()
-    local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
-    -- The first-character editor always uses the standard freemode roleplay body.
-    local model = XSAppearance.model(nil, gender)
-    if not requestModel(model) then return false end
 
-    local playerCoords = GetEntityCoords(playerPed)
-    local preview = CreatePed(2, model, settings.coords.x, settings.coords.y, settings.coords.z, settings.coords.w, false, false)
-    if not preview or preview == 0 or not DoesEntityExist(preview) then
-        SetModelAsNoLongerNeeded(model)
-        return false
-    end
+    -- Use the actual player as the mannequin. A cloned ped can inherit the
+    -- player's hidden state and leave the editor looking empty on some builds.
+    placeOnSceneFloor(playerPed, settings.coords)
+    SetEntityHeading(playerPed, settings.coords.w or 0.0)
+    SetEntityCollision(playerPed, true, true)
+    SetEntityLoadCollisionFlag(playerPed, true)
+    SetEntityVisible(playerPed, true, false)
+    SetEntityLocallyVisible(playerPed)
+    ResetEntityAlpha(playerPed)
+    SetEntityAlpha(playerPed, 255, false)
+    SetEntityInvincible(playerPed, true)
+    SetEntityCanBeDamaged(playerPed, false)
+    SetBlockingOfNonTemporaryEvents(playerPed, true)
+    SetPedCanBeTargetted(playerPed, false)
+    FreezeEntityPosition(playerPed, true)
 
-    SetPedDefaultComponentVariation(preview)
-    if playerCoords then ClonePedToTarget(playerPed, preview) end
-    SetModelAsNoLongerNeeded(model)
-
-    if token ~= clothingPreviewToken or not DoesEntityExist(preview) then
-        if DoesEntityExist(preview) then DeleteEntity(preview) end
-        return false
-    end
-
-    clothingPreviewPed = preview
-    SetEntityAsMissionEntity(preview, true, true)
-    SetEntityVisible(preview, true, false)
-    SetEntityLocallyVisible(preview)
-    ResetEntityAlpha(preview)
-    SetEntityAlpha(preview, 255, false)
-    placeOnSceneFloor(preview, settings.coords)
-    SetEntityCollision(preview, false, false)
-    SetEntityInvincible(preview, true)
-    SetEntityCanBeDamaged(preview, false)
-    SetBlockingOfNonTemporaryEvents(preview, true)
-    SetPedCanBeTargetted(preview, false)
-    NetworkSetEntityInvisibleToNetwork(preview, true)
-    FreezeEntityPosition(preview, true)
-    XSAnimation.play(preview)
+    if token ~= clothingPreviewToken or not DoesEntityExist(playerPed) then return false end
+    clothingPreviewPed = playerPed
+    clothingPreviewUsesPlayer = true
 
     clothingPreviewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     SetCamCoord(clothingPreviewCam, settings.camera.x, settings.camera.y, settings.camera.z)
     PointCamAtCoord(clothingPreviewCam, settings.cameraLookAt.x, settings.cameraLookAt.y, settings.cameraLookAt.z)
-    SetCamFov(clothingPreviewCam, settings.fov or 42.0)
-    XSSceneEffects.applyCamera(clothingPreviewCam)
+    SetCamFov(clothingPreviewCam, settings.fov or 48.0)
     SetCamActive(clothingPreviewCam, true)
     SetFocusPosAndVel(settings.coords.x, settings.coords.y, settings.coords.z, 0.0, 0.0, 0.0)
     RenderScriptCams(true, false, 0, true, true)
-    SetEntityCollision(playerPed, true, true)
-    SetEntityVisible(playerPed, false, false)
-    FreezeEntityPosition(playerPed, true)
     return true
 end
 
@@ -436,7 +420,10 @@ local function openCustomClothing()
     placeOnSceneFloor(ped, settings.coords)
     SetEntityCollision(ped, true, true)
     FreezeEntityPosition(ped, true)
-    SetEntityVisible(ped, false, false)
+    SetEntityVisible(ped, true, false)
+    SetEntityLocallyVisible(ped)
+    ResetEntityAlpha(ped)
+    SetEntityAlpha(ped, 255, false)
     clothingItems = appearanceCategories(ped)
     for _, item in ipairs(clothingCategories(ped)) do clothingItems[#clothingItems + 1] = item end
     clothingHeading = GetEntityHeading(ped)
@@ -462,7 +449,9 @@ local function finishCustomClothing()
     XSAppearance.saveCurrent()
     destroyClothingPreview()
     local ped = PlayerPedId()
+    ResetEntityAlpha(ped)
     SetEntityVisible(ped, true, false)
+    SetEntityCollision(ped, true, true)
     FreezeEntityPosition(ped, false)
     SetNuiFocus(false, false)
     SendNUIMessage({ action = "clothingClose" })
