@@ -46,9 +46,52 @@ local function destroyClothingPreview()
     if clothingPreviewPed and DoesEntityExist(clothingPreviewPed) and not clothingPreviewUsesPlayer then
         DeleteEntity(clothingPreviewPed)
     end
+    local playerPed = PlayerPedId()
+    if playerPed and DoesEntityExist(playerPed) then
+        SetEntityVisible(playerPed, true, false)
+        SetEntityLocallyVisible(playerPed)
+        ResetEntityAlpha(playerPed)
+    end
     clothingPreviewPed = nil
     clothingPreviewUsesPlayer = false
     ClearFocus()
+end
+
+local function copyPedAppearance(sourcePed, targetPed)
+    SetPedDefaultComponentVariation(targetPed)
+
+    for component = 0, 11 do
+        SetPedComponentVariation(
+            targetPed,
+            component,
+            GetPedDrawableVariation(sourcePed, component),
+            GetPedTextureVariation(sourcePed, component),
+            GetPedPaletteVariation(sourcePed, component)
+        )
+    end
+
+    for prop = 0, 7 do
+        local drawable = GetPedPropIndex(sourcePed, prop)
+        if drawable < 0 then
+            ClearPedProp(targetPed, prop)
+        else
+            SetPedPropIndex(targetPed, prop, drawable, GetPedPropTextureIndex(sourcePed, prop), true)
+        end
+    end
+
+    for feature = 0, 19 do
+        SetPedFaceFeature(targetPed, feature, GetPedFaceFeature(sourcePed, feature))
+    end
+
+    for overlay = 0, 12 do
+        local value = GetPedHeadOverlayValue(sourcePed, overlay)
+        if value >= 0 then
+            SetPedHeadOverlay(targetPed, overlay, value, 1.0)
+        end
+    end
+
+    SetPedEyeColor(targetPed, GetPedEyeColor(sourcePed))
+    SetPedHairColor(targetPed, GetPedHairColor(sourcePed), GetPedHairHighlightColor(sourcePed))
 end
 
 local function createClothingPreview()
@@ -56,34 +99,67 @@ local function createClothingPreview()
     local token = clothingPreviewToken
     local playerPed = PlayerPedId()
     local settings = clothingPreviewSettings()
+    local model = GetEntityModel(playerPed)
 
-    -- Use the actual player as the mannequin. A cloned ped can inherit the
-    -- player's hidden state and leave the editor looking empty on some builds.
-    placeOnSceneFloor(playerPed, settings.coords)
-    SetEntityHeading(playerPed, settings.coords.w or 0.0)
-    SetEntityCollision(playerPed, true, true)
-    SetEntityLoadCollisionFlag(playerPed, true)
-    SetEntityVisible(playerPed, true, false)
-    SetEntityLocallyVisible(playerPed)
-    ResetEntityAlpha(playerPed)
-    SetEntityAlpha(playerPed, 255, false)
-    SetEntityInvincible(playerPed, true)
-    SetEntityCanBeDamaged(playerPed, false)
-    SetBlockingOfNonTemporaryEvents(playerPed, true)
-    SetPedCanBeTargetted(playerPed, false)
-    FreezeEntityPosition(playerPed, true)
+    if not model or model == 0 or not requestModel(model) then
+        print("[XS-MultiCharacter] Unable to load the clothing preview model")
+        return false
+    end
 
-    if token ~= clothingPreviewToken or not DoesEntityExist(playerPed) then return false end
-    clothingPreviewPed = playerPed
-    clothingPreviewUsesPlayer = true
+    local floorZ = sceneFloor(settings.coords)
+    local mannequin = CreatePed(4, model, settings.coords.x, settings.coords.y, floorZ, settings.coords.w or 0.0, false, false)
+    if not mannequin or mannequin == 0 or not DoesEntityExist(mannequin) then
+        SetModelAsNoLongerNeeded(model)
+        print("[XS-MultiCharacter] Unable to create the clothing preview mannequin")
+        return false
+    end
 
+    SetEntityAsMissionEntity(mannequin, true, true)
+    SetEntityCoordsNoOffset(mannequin, settings.coords.x, settings.coords.y, floorZ, false, false, false)
+    SetEntityHeading(mannequin, settings.coords.w or 0.0)
+    SetEntityCollision(mannequin, true, true)
+    SetEntityLoadCollisionFlag(mannequin, true)
+    SetEntityVisible(mannequin, true, false)
+    SetEntityLocallyVisible(mannequin)
+    ResetEntityAlpha(mannequin)
+    SetEntityAlpha(mannequin, 255, false)
+    SetEntityInvincible(mannequin, true)
+    SetEntityCanBeDamaged(mannequin, false)
+    SetBlockingOfNonTemporaryEvents(mannequin, true)
+    SetPedCanBeTargetted(mannequin, false)
+    FreezeEntityPosition(mannequin, true)
+    copyPedAppearance(playerPed, mannequin)
+    SetModelAsNoLongerNeeded(model)
+
+    if token ~= clothingPreviewToken then
+        DeleteEntity(mannequin)
+        return false
+    end
+
+    -- Keep the real player hidden at the same editor location. All edits still
+    -- apply to it, while this local mannequin is the entity shown by the camera.
+    SetEntityVisible(playerPed, false, false)
+    clothingPreviewPed = mannequin
+    clothingPreviewUsesPlayer = false
+
+    local cameraPosition = GetOffsetFromEntityInWorldCoords(mannequin, 0.0, 4.8, 1.35)
+    local cameraLookAt = GetOffsetFromEntityInWorldCoords(mannequin, 0.0, 0.0, 0.95)
     clothingPreviewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
-    SetCamCoord(clothingPreviewCam, settings.camera.x, settings.camera.y, settings.camera.z)
-    PointCamAtCoord(clothingPreviewCam, settings.cameraLookAt.x, settings.cameraLookAt.y, settings.cameraLookAt.z)
+    SetCamCoord(clothingPreviewCam, cameraPosition.x, cameraPosition.y, cameraPosition.z)
+    PointCamAtCoord(clothingPreviewCam, cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)
     SetCamFov(clothingPreviewCam, settings.fov or 48.0)
     SetCamActive(clothingPreviewCam, true)
-    SetFocusPosAndVel(settings.coords.x, settings.coords.y, settings.coords.z, 0.0, 0.0, 0.0)
+    SetFocusPosAndVel(settings.coords.x, settings.coords.y, floorZ, 0.0, 0.0, 0.0)
     RenderScriptCams(true, false, 0, true, true)
+    CreateThread(function()
+        while customClothingOpen and clothingPreviewPed == mannequin and DoesEntityExist(mannequin) do
+            Wait(0)
+            SetEntityVisible(mannequin, true, false)
+            SetEntityLocallyVisible(mannequin)
+            ResetEntityAlpha(mannequin)
+            SetEntityAlpha(mannequin, 255, false)
+        end
+    end)
     return true
 end
 
@@ -428,7 +504,17 @@ local function openCustomClothing()
     for _, item in ipairs(clothingCategories(ped)) do clothingItems[#clothingItems + 1] = item end
     clothingHeading = GetEntityHeading(ped)
     customClothingOpen = true
-    createClothingPreview()
+    if not createClothingPreview() then
+        customClothingOpen = false
+        SetEntityVisible(ped, true, false)
+        SetEntityLocallyVisible(ped)
+        ResetEntityAlpha(ped)
+        FreezeEntityPosition(ped, false)
+        SetNuiFocus(false, false)
+        SendNUIMessage({ action = "clothingClose" })
+        print("[XS-MultiCharacter] Style Lab could not load a visible preview mannequin")
+        return
+    end
     SetNuiFocus(true, true)
     SendNUIMessage({ action = "clothingOpen", categories = clothingItems })
     if IsScreenFadedOut() then DoScreenFadeIn(250) end
