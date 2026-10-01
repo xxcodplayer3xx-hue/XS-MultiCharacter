@@ -14,9 +14,10 @@ Config.Client.Scene = {
 
 Config.Client.ClothingPreview = {
     coords = vec4(-811.7346, 175.2027, 76.7454, 107.3739),
-    camera = vec3(-813.5, 174.0, 78.0),
-    cameraLookAt = vec3(-811.7346, 175.2027, 76.7454),
-    fov = 42.0
+    -- Keep enough distance to show the complete freemode ped, not only the feet.
+    camera = vec3(-815.2, 172.8, 78.8),
+    cameraLookAt = vec3(-811.7346, 175.2027, 77.65),
+    fov = 48.0
 }
 
 Config.Client.SceneEffects = {
