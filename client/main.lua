@@ -9,6 +9,21 @@ local clothingHeading = 0.0
 local clothingPreviewPed, clothingPreviewCam
 local requestModel
 local previewToken = 0
+
+local function sceneFloor(coords)
+    RequestCollisionAtCoord(coords.x, coords.y, coords.z)
+    local found, groundZ = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 2.0, false)
+    if found then return groundZ end
+    return coords.z
+end
+
+local function placeOnSceneFloor(entity, coords)
+    if not entity or not DoesEntityExist(entity) then return end
+    local floorZ = sceneFloor(coords)
+    SetEntityCoordsNoOffset(entity, coords.x, coords.y, floorZ, false, false, false)
+    SetEntityHeading(entity, coords.w or 0.0)
+    SetEntityLoadCollisionFlag(entity, true)
+end
 local clothingPreviewToken = 0
 
 local function clothingPreviewSettings()
@@ -37,16 +52,13 @@ local function createClothingPreview()
     local token = clothingPreviewToken
     local playerPed = PlayerPedId()
     local settings = clothingPreviewSettings()
-    local model = GetEntityModel(playerPed)
     local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
-
-    if not IsModelInCdimage(model) or not IsModelValid(model) then
-        model = XSAppearance.model(nil, gender)
-    end
+    -- The first-character editor always uses the standard freemode roleplay body.
+    local model = XSAppearance.model(nil, gender)
     if not requestModel(model) then return false end
 
     local playerCoords = GetEntityCoords(playerPed)
-    local preview = CreatePed(2, model, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, settings.coords.w, false, false)
+    local preview = CreatePed(2, model, settings.coords.x, settings.coords.y, settings.coords.z, settings.coords.w, false, false)
     if not preview or preview == 0 or not DoesEntityExist(preview) then
         SetModelAsNoLongerNeeded(model)
         return false
@@ -67,8 +79,7 @@ local function createClothingPreview()
     SetEntityLocallyVisible(preview)
     ResetEntityAlpha(preview)
     SetEntityAlpha(preview, 255, false)
-    SetEntityCoordsNoOffset(preview, settings.coords.x, settings.coords.y, settings.coords.z - 1.0, false, false, false)
-    SetEntityHeading(preview, settings.coords.w)
+    placeOnSceneFloor(preview, settings.coords)
     SetEntityCollision(preview, false, false)
     SetEntityInvincible(preview, true)
     SetEntityCanBeDamaged(preview, false)
@@ -86,6 +97,7 @@ local function createClothingPreview()
     SetCamActive(clothingPreviewCam, true)
     SetFocusPosAndVel(settings.coords.x, settings.coords.y, settings.coords.z, 0.0, 0.0, 0.0)
     RenderScriptCams(true, false, 0, true, true)
+    SetEntityCollision(playerPed, true, true)
     SetEntityVisible(playerPed, false, false)
     FreezeEntityPosition(playerPed, true)
     return true
@@ -144,7 +156,7 @@ local function showPed(character, fallbackGender)
     local model = XSAppearance.model(character and character.appearance, gender)
     if not requestModel(model) or token ~= previewToken then return end
     local pos = Config.Client.Scene.coords
-    previewPed = CreatePed(2, model, pos.x, pos.y, pos.z - 1.0, pos.w, false, true)
+    previewPed = CreatePed(2, model, pos.x, pos.y, sceneFloor(pos), pos.w, false, true)
     SetEntityInvincible(previewPed, true)
     FreezeEntityPosition(previewPed, true)
     SetBlockingOfNonTemporaryEvents(previewPed, true)
@@ -186,7 +198,8 @@ local function setupScene()
     XSSceneEffects.enter()
     local scene = Config.Client.Scene
     local playerPed = PlayerPedId()
-    SetEntityCoords(playerPed, scene.coords.x, scene.coords.y, scene.coords.z - 5.0, false, false, false, false)
+    placeOnSceneFloor(playerPed, scene.coords)
+    SetEntityCollision(playerPed, true, true)
     FreezeEntityPosition(playerPed, true)
     SetEntityVisible(playerPed, false, false)
     createCamera(scene.camera, scene.cameraLookAt, false)
@@ -409,15 +422,20 @@ local function openCustomClothing()
     local ped = PlayerPedId()
     local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
     local model = XSAppearance.model(nil, gender)
+    local settings = clothingPreviewSettings()
     if GetEntityModel(ped) ~= model and requestModel(model) then
         local coords, heading = GetEntityCoords(ped), GetEntityHeading(ped)
         SetPlayerModel(PlayerId(), model)
         ped = PlayerPedId()
         SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false, false)
         SetEntityHeading(ped, heading)
+        SetEntityLoadCollisionFlag(ped, true)
         SetPedDefaultComponentVariation(ped)
         SetModelAsNoLongerNeeded(model)
     end
+    placeOnSceneFloor(ped, settings.coords)
+    SetEntityCollision(ped, true, true)
+    FreezeEntityPosition(ped, true)
     SetEntityVisible(ped, false, false)
     clothingItems = appearanceCategories(ped)
     for _, item in ipairs(clothingCategories(ped)) do clothingItems[#clothingItems + 1] = item end
@@ -532,16 +550,20 @@ RegisterNetEvent('XS-MultiCharacter:client:loggedIn', function(citizenid, positi
         waitingForClothing = false
         clothingHandledElsewhere = false
         removeScene()
-        local ped = PlayerPedId()
-        SetEntityVisible(ped, true, false)
-        FreezeEntityPosition(ped, false)
-        DoScreenFadeIn(100)
 
         if Config.FirstCharacter.clothing.enabled and Config.FirstCharacter.clothing.custom == true then
+            -- Move the real ped to the editor floor before it is ever made visible.
+            -- This prevents the brief spawn at the default/underground login position.
             waitingForClothing = true
+            DoScreenFadeIn(0)
             openCustomClothing()
             return
         end
+
+        local ped = PlayerPedId()
+        SetEntityVisible(ped, true, false)
+        FreezeEntityPosition(ped, false)
+        DoScreenFadeIn(0)
 
         if Config.FirstCharacter.apartments.enabled and XSBridge.openApartments(activeCharacterData or activeCharacter) then
             XSPed.begin(nil)
