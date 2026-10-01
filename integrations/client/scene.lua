@@ -5,6 +5,9 @@ local effectsActive = false
 
 function XSSceneEffects.enter()
     effectsActive = true
+    ClearTimecycleModifier()
+    ClearExtraTimecycleModifier()
+    AnimpostfxStopAll()
     local config = Config.Client.SceneEffects
     if config.timecycle then
         SetTimecycleModifier(config.timecycle)
@@ -58,4 +61,9 @@ function XSSceneEffects.leave()
     effectsActive = false
     XSSceneEffects.stopOrbit()
     ClearTimecycleModifier()
+    ClearExtraTimecycleModifier()
+    AnimpostfxStopAll()
+    SetNightvision(false)
+    SetSeethrough(false)
+    StopGameplayCamShaking(true)
 end
