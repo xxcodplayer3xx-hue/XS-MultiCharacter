@@ -21,8 +21,8 @@ Config.Client.ClothingPreview = {
     floorZ = 13.94,
     -- The camera must be physically close to the mannequin. A low FOV alone
     -- leaves the ped tiny because the old camera was over 20 metres away.
-    camera = vec3(-1331.25, -3041.25, 17.00),
-    cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
+    camera = vec3(-1333.60, -3042.60, 15.80),
+    cameraLookAt = vec3(-1336.00, -3044.00, 14.95),
     fov = 27.0
 }
 
