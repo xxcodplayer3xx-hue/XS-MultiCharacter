@@ -21,7 +21,7 @@ Config.Client.ClothingPreview = {
     floorZ = 13.94,
     camera = vec3(-1322.00, -3060.00, 21.50),
     cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
-    fov = 30.0
+    fov = 27.0
 }
 
 Config.Client.SceneEffects = {
