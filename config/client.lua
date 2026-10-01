@@ -19,7 +19,9 @@ Config.Client.ClothingPreview = {
     -- Keep the mannequin on the same open-air apron as the character preview.
     coords = vec4(-1336.00, -3044.00, 13.94, 60.0),
     floorZ = 13.94,
-    camera = vec3(-1322.00, -3060.00, 21.50),
+    -- The camera must be physically close to the mannequin. A low FOV alone
+    -- leaves the ped tiny because the old camera was over 20 metres away.
+    camera = vec3(-1331.25, -3041.25, 17.00),
     cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
     fov = 27.0
 }
