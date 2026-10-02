@@ -5,8 +5,9 @@ Config.Client.Scene = {
     -- streamed roof, balcony, or interior shell cannot become the ground.
     coords = vec4(-1336.00, -3044.00, 13.94, 60.0),
     floorZ = 13.94,
-    -- Keep the selected character close enough to inspect before loading in.
-    camera = vec3(-1332.80, -3042.10, 16.05),
+    -- Keep the selected character slightly backed up while looking straight at
+    -- the front of the ped instead of viewing it from the side.
+    camera = vec3(-1340.15, -3041.60, 16.05),
     cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
     fov = 32.0,
     -- Standard freemode roleplay bodies used by most Qbox/QB servers.
