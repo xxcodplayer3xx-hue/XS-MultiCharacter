@@ -286,6 +286,27 @@ local function fadeOut()
     while not IsScreenFadedOut() do Wait(0) end
 end
 
+--- Restore the local player after leaving the character-selection scene.
+--- @param ped number The current player ped entity
+local function restoreGameplayPlayer(ped)
+    if not ped or not DoesEntityExist(ped) then return end
+
+    SetPlayerControl(PlayerId(), true, 0)
+    SetNuiFocus(false, false)
+    ClearFocus()
+    SetEntityVisible(ped, true, false)
+    SetEntityLocallyVisible(ped)
+    ResetEntityAlpha(ped)
+    SetEntityAlpha(ped, 255, false)
+    SetEntityCollision(ped, true, true)
+    SetEntityHasGravity(ped, true)
+    SetEntityInvincible(ped, false)
+    SetEntityCanBeDamaged(ped, true)
+    SetPedCanBeTargetted(ped, true)
+    SetPedCanRagdoll(ped, true)
+    FreezeEntityPosition(ped, false)
+end
+
 local function destroyPreviewPed()
     previewToken = previewToken + 1
     restoreSelectorPeds()
@@ -485,17 +506,23 @@ local function spawnAt(coords, spawnId)
     fadeOut()
     removeScene()
     local ped = PlayerPedId()
-    SetEntityVisible(ped, true, false)
-    FreezeEntityPosition(ped, false)
+    restoreGameplayPlayer(ped)
     RequestCollisionAtCoord(coords.x, coords.y, coords.z)
     SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false)
     SetEntityHeading(ped, coords.w or coords.heading or 0.0)
     local deadline = GetGameTimer() + 10000
     while not HasCollisionLoadedAroundEntity(ped) and GetGameTimer() < deadline do Wait(0) end
+    restoreGameplayPlayer(PlayerPedId())
     XSBridge.clearInside()
     XSBridge.playerLoaded()
     XSPed.begin(savedAppearance())
     DoScreenFadeIn(700)
+    CreateThread(function()
+        Wait(500)
+        if not selectorOpen and not customClothingOpen then
+            restoreGameplayPlayer(PlayerPedId())
+        end
+    end)
     TriggerEvent('XS-MultiCharacter:client:characterSpawned', activeCharacter, spawnId, coords)
     TriggerServerEvent('XS-MultiCharacter:server:spawned', spawnId)
 end
@@ -840,8 +867,7 @@ RegisterNetEvent('XS-MultiCharacter:client:loggedIn', function(citizenid, positi
         end
 
         local ped = PlayerPedId()
-        SetEntityVisible(ped, true, false)
-        FreezeEntityPosition(ped, false)
+        restoreGameplayPlayer(ped)
         DoScreenFadeIn(0)
 
         if Config.FirstCharacter.apartments.enabled and XSBridge.openApartments(activeCharacterData or activeCharacter) then

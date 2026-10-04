@@ -9,7 +9,7 @@ Config.Client.Scene = {
     -- the front of the ped instead of viewing it from the side.
     camera = vec3(-1340.15, -3041.60, 16.05),
     cameraLookAt = vec3(-1336.00, -3044.00, 15.00),
-    fov = 32.0,
+    fov = 36.0,
     -- Standard freemode roleplay bodies used by most Qbox/QB servers.
     maleModel = `mp_m_freemode_01`,
     femaleModel = `mp_f_freemode_01`,
