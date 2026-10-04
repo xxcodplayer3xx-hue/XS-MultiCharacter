@@ -10,6 +10,7 @@ local clothingPreviewPed, clothingPreviewCam
 local clothingPreviewUsesPlayer = false
 local requestModel
 local applyAppearanceItem
+local applyEditorAppearance
 local previewToken = 0
 local selectorHiddenPeds = {}
 
@@ -93,6 +94,11 @@ local function destroyClothingPreview()
     ClearFocus()
 end
 
+local function overlayValue(ped, overlay)
+    local value = GetPedHeadOverlayValue(ped, overlay)
+    return value == 255 and -1 or value
+end
+
 local function applyHeadOverlay(targetPed, overlay, value)
     if not targetPed or not DoesEntityExist(targetPed) then return end
     if value == nil or value < 0 or value == 255 then
@@ -100,15 +106,27 @@ local function applyHeadOverlay(targetPed, overlay, value)
         return
     end
 
-    SetPedHeadOverlay(targetPed, overlay, value, 1.0)
+    SetPedHeadOverlay(targetPed, overlay, math.floor(value), 1.0)
     if overlay == 1 or overlay == 2 then
-        SetPedHeadOverlayColor(targetPed, overlay, 1, GetPedHairColor(targetPed), GetPedHairHighlightColor(targetPed))
+        local hairColor = GetPedHairColor(targetPed)
+        local hairHighlight = GetPedHairHighlightColor(targetPed)
+        SetPedHeadOverlayColor(targetPed, overlay, 1, hairColor, hairHighlight)
     end
 end
 
-local function overlayValue(ped, overlay)
-    local value = GetPedHeadOverlayValue(ped, overlay)
-    return value == 255 and -1 or value
+local function applyHairColor(targetPed, color)
+    if not targetPed or not DoesEntityExist(targetPed) then return end
+    local hairColor = math.max(0, math.floor(tonumber(color) or 0))
+    SetPedHairColor(targetPed, hairColor, hairColor)
+end
+
+local function copyHeadAppearance(sourcePed, targetPed)
+    SetPedEyeColor(targetPed, GetPedEyeColor(sourcePed))
+    applyHairColor(targetPed, GetPedHairColor(sourcePed))
+
+    for overlay = 0, 12 do
+        applyHeadOverlay(targetPed, overlay, overlayValue(sourcePed, overlay))
+    end
 end
 
 local function copyPedAppearance(sourcePed, targetPed)
@@ -137,12 +155,7 @@ local function copyPedAppearance(sourcePed, targetPed)
         SetPedFaceFeature(targetPed, feature, GetPedFaceFeature(sourcePed, feature))
     end
 
-    for overlay = 0, 12 do
-        applyHeadOverlay(targetPed, overlay, overlayValue(sourcePed, overlay))
-    end
-
-    SetPedEyeColor(targetPed, GetPedEyeColor(sourcePed))
-    SetPedHairColor(targetPed, GetPedHairColor(sourcePed), GetPedHairHighlightColor(sourcePed))
+    copyHeadAppearance(sourcePed, targetPed)
 end
 
 local function clearClothingVisualEffects()
@@ -251,12 +264,8 @@ local function createClothingPreview()
             end
             hideSelectorPeds(mannequin)
             if GetGameTimer() >= nextAppearanceRefresh then
-                for _, item in ipairs(clothingItems) do
-                    if item.kind == "overlay" or item.kind == "faceFeature" or item.kind == "eyeColor" or item.kind == "hairStyle" or item.kind == "hairColor" then
-                        applyAppearanceItem(currentPlayerPed, item)
-                        applyAppearanceItem(mannequin, item)
-                    end
-                end
+                applyEditorAppearance(currentPlayerPed)
+                applyEditorAppearance(mannequin)
                 nextAppearanceRefresh = GetGameTimer() + 250
             end
             clearClothingVisualEffects()
@@ -691,9 +700,40 @@ applyAppearanceItem = function(targetPed, item)
     elseif item.kind == "overlay" then
         applyHeadOverlay(targetPed, item.overlay, item.value)
     elseif item.kind == "hairStyle" then
-        SetPedComponentVariation(targetPed, 2, item.value, GetPedTextureVariation(targetPed, 2), 0)
+        SetPedComponentVariation(targetPed, 2, math.floor(item.value), GetPedTextureVariation(targetPed, 2), 0)
     elseif item.kind == "hairColor" then
-        SetPedHairColor(targetPed, item.value, item.value)
+        applyHairColor(targetPed, item.value)
+    end
+end
+
+applyEditorAppearance = function(targetPed)
+    if not targetPed or not DoesEntityExist(targetPed) then return end
+
+    -- Component 2 changes can clear overlays, so hair and facial overlays are
+    -- deliberately applied in separate passes.
+    for _, item in ipairs(clothingItems) do
+        if item.kind == "faceFeature" or item.kind == "eyeColor" or item.kind == "hairStyle" or item.kind == "hairColor" then
+            applyAppearanceItem(targetPed, item)
+        end
+    end
+    for _, item in ipairs(clothingItems) do
+        if item.kind == "overlay" then
+            applyAppearanceItem(targetPed, item)
+        end
+    end
+end
+
+local function syncHairControls(changedItem)
+    if changedItem.kind ~= "component" and changedItem.kind ~= "hairStyle" then return end
+    if changedItem.kind == "component" and changedItem.slot ~= 2 then return end
+
+    for _, item in ipairs(clothingItems) do
+        if changedItem.kind == "component" and item.kind == "hairStyle" then
+            item.value = changedItem.drawable
+        elseif changedItem.kind == "hairStyle" and item.kind == "component" and item.slot == 2 then
+            item.drawable = changedItem.value
+            item.drawables = math.max(GetNumberOfPedDrawableVariations(PlayerPedId(), 2), 1)
+        end
     end
 end
 
@@ -922,6 +962,9 @@ RegisterNUICallback("clothingChange", function(data, cb)
                 end
                 applyItem(ped)
                 applyItem(clothingPreviewPed)
+                syncHairControls(item)
+                applyEditorAppearance(ped)
+                applyEditorAppearance(clothingPreviewPed)
                 cb({ ok = true, id = item.id, kind = item.kind, drawable = item.drawable, texture = item.texture, textures = item.textures })
                 return
             end
@@ -935,6 +978,9 @@ RegisterNUICallback("clothingChange", function(data, cb)
                 applyAppearanceItem(ped, item)
                 applyAppearanceItem(clothingPreviewPed, item)
             end
+            syncHairControls(item)
+            applyEditorAppearance(ped)
+            applyEditorAppearance(clothingPreviewPed)
             cb({ ok = true, id = item.id, kind = item.kind, value = item.value })
             return
         end
