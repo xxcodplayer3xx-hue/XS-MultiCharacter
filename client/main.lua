@@ -9,7 +9,9 @@ local clothingHeading = 0.0
 local clothingPreviewPed, clothingPreviewCam
 local clothingPreviewUsesPlayer = false
 local requestModel
+local applyAppearanceItem
 local previewToken = 0
+local selectorHiddenPeds = {}
 
 local function sceneFloor(coords, configuredFloorZ)
     if configuredFloorZ then return configuredFloorZ end
@@ -38,6 +40,30 @@ local function clothingPreviewSettings()
     }
 end
 
+local function hideSelectorPeds(allowedPed)
+    local anchor = Config.Client.Scene.coords
+    for _, ped in ipairs(GetGamePool("CPed")) do
+        if ped ~= allowedPed and DoesEntityExist(ped) then
+            local coords = GetEntityCoords(ped)
+            if Vdist(coords.x, coords.y, coords.z, anchor.x, anchor.y, anchor.z) < 30.0 then
+                selectorHiddenPeds[ped] = true
+                SetEntityVisible(ped, false, false)
+                SetEntityLocallyInvisible(ped)
+            end
+        end
+    end
+end
+
+local function restoreSelectorPeds()
+    for ped in pairs(selectorHiddenPeds) do
+        if DoesEntityExist(ped) then
+            SetEntityVisible(ped, true, false)
+            SetEntityLocallyVisible(ped)
+        end
+    end
+    selectorHiddenPeds = {}
+end
+
 local function destroyClothingPreview()
     clothingPreviewToken = clothingPreviewToken + 1
     if clothingPreviewCam then
@@ -63,7 +89,26 @@ local function destroyClothingPreview()
     end
     clothingPreviewPed = nil
     clothingPreviewUsesPlayer = false
+    restoreSelectorPeds()
     ClearFocus()
+end
+
+local function applyHeadOverlay(targetPed, overlay, value)
+    if not targetPed or not DoesEntityExist(targetPed) then return end
+    if value == nil or value < 0 or value == 255 then
+        SetPedHeadOverlay(targetPed, overlay, 255, 0.0)
+        return
+    end
+
+    SetPedHeadOverlay(targetPed, overlay, value, 1.0)
+    if overlay == 1 or overlay == 2 then
+        SetPedHeadOverlayColor(targetPed, overlay, 1, GetPedHairColor(targetPed), GetPedHairHighlightColor(targetPed))
+    end
+end
+
+local function overlayValue(ped, overlay)
+    local value = GetPedHeadOverlayValue(ped, overlay)
+    return value == 255 and -1 or value
 end
 
 local function copyPedAppearance(sourcePed, targetPed)
@@ -93,10 +138,7 @@ local function copyPedAppearance(sourcePed, targetPed)
     end
 
     for overlay = 0, 12 do
-        local value = GetPedHeadOverlayValue(sourcePed, overlay)
-        if value >= 0 then
-            SetPedHeadOverlay(targetPed, overlay, value, 1.0)
-        end
+        applyHeadOverlay(targetPed, overlay, overlayValue(sourcePed, overlay))
     end
 
     SetPedEyeColor(targetPed, GetPedEyeColor(sourcePed))
@@ -196,8 +238,27 @@ local function createClothingPreview()
     RenderScriptCams(true, false, 0, true, true)
 
     CreateThread(function()
+        local nextAppearanceRefresh = 0
         while customClothingOpen and clothingPreviewPed == mannequin and DoesEntityExist(mannequin) do
             Wait(0)
+            local currentPlayerPed = PlayerPedId()
+            if DoesEntityExist(currentPlayerPed) and currentPlayerPed ~= mannequin then
+                SetEntityVisible(currentPlayerPed, false, false)
+                SetEntityLocallyInvisible(currentPlayerPed)
+                SetEntityCollision(currentPlayerPed, false, false)
+                SetEntityHasGravity(currentPlayerPed, false)
+                FreezeEntityPosition(currentPlayerPed, true)
+            end
+            hideSelectorPeds(mannequin)
+            if GetGameTimer() >= nextAppearanceRefresh then
+                for _, item in ipairs(clothingItems) do
+                    if item.kind == "overlay" or item.kind == "faceFeature" or item.kind == "eyeColor" or item.kind == "hairStyle" or item.kind == "hairColor" then
+                        applyAppearanceItem(currentPlayerPed, item)
+                        applyAppearanceItem(mannequin, item)
+                    end
+                end
+                nextAppearanceRefresh = GetGameTimer() + 250
+            end
             clearClothingVisualEffects()
             SetEntityVisible(mannequin, true, false)
             SetEntityLocallyVisible(mannequin)
@@ -227,6 +288,7 @@ end
 
 local function destroyPreviewPed()
     previewToken = previewToken + 1
+    restoreSelectorPeds()
     if previewPed and DoesEntityExist(previewPed) then
         SetEntityAsMissionEntity(previewPed, true, true)
         DeleteEntity(previewPed)
@@ -331,6 +393,15 @@ local function showPed(character, fallbackGender)
     CreateThread(function()
         while selectorOpen and token == previewToken and DoesEntityExist(previewPed) do
             Wait(0)
+            local playerPed = PlayerPedId()
+            if DoesEntityExist(playerPed) and playerPed ~= previewPed then
+                SetEntityVisible(playerPed, false, false)
+                SetEntityLocallyInvisible(playerPed)
+                SetEntityCollision(playerPed, false, false)
+                SetEntityHasGravity(playerPed, false)
+                FreezeEntityPosition(playerPed, true)
+            end
+            hideSelectorPeds(previewPed)
             SetEntityVisible(previewPed, true, false)
             SetEntityLocallyVisible(previewPed)
             ResetEntityAlpha(previewPed)
@@ -377,6 +448,12 @@ local function setupScene()
     SetEntityCollision(playerPed, true, true)
     FreezeEntityPosition(playerPed, true)
     SetEntityVisible(playerPed, false, false)
+    CreateThread(function()
+        while selectorOpen do
+            Wait(0)
+            hideSelectorPeds(previewPed)
+        end
+    end)
     createCamera(scene.camera, scene.cameraLookAt, false, scene.fov)
     XSSceneEffects.startOrbit(previewCam, scene.camera, scene.cameraLookAt)
     DoScreenFadeIn(250)
@@ -514,9 +591,9 @@ local function appearanceCategories(ped)
         { id = "cheekWidth", short = "C2", label = "Cheek Width", name = "Cheek Width", kind = "faceFeature", feature = 9, value = GetPedFaceFeature(ped, 9), minimum = -1, maximum = 1, step = 0.05 },
         { id = "jawWidth", short = "J1", label = "Jaw Width", name = "Jaw Width", kind = "faceFeature", feature = 13, value = GetPedFaceFeature(ped, 13), minimum = -1, maximum = 1, step = 0.05 },
         { id = "chinLength", short = "J2", label = "Chin Length", name = "Chin Length", kind = "faceFeature", feature = 16, value = GetPedFaceFeature(ped, 16), minimum = -1, maximum = 1, step = 0.05 },
-        { id = "brows", short = "B1", label = "Eyebrows", name = "Eyebrow Style", kind = "overlay", overlay = 2, value = GetPedHeadOverlayValue(ped, 2), minimum = 0, maximum = math.max(GetNumHeadOverlayValues(2) - 1, 0), step = 1 },
-        { id = "beard", short = "B2", label = "Facial Hair", name = "Beard Style", kind = "overlay", overlay = 1, value = GetPedHeadOverlayValue(ped, 1), minimum = 0, maximum = math.max(GetNumHeadOverlayValues(1) - 1, 0), step = 1 },
-        { id = "makeup", short = "M1", label = "Makeup", name = "Makeup Style", kind = "overlay", overlay = 4, value = GetPedHeadOverlayValue(ped, 4), minimum = 0, maximum = math.max(GetNumHeadOverlayValues(4) - 1, 0), step = 1 },
+        { id = "brows", short = "B1", label = "Eyebrows", name = "Eyebrow Style", kind = "overlay", overlay = 2, value = overlayValue(ped, 2), minimum = -1, maximum = math.max(GetNumHeadOverlayValues(2) - 1, 0), step = 1 },
+        { id = "beard", short = "B2", label = "Facial Hair", name = "Beard Style", kind = "overlay", overlay = 1, value = overlayValue(ped, 1), minimum = -1, maximum = math.max(GetNumHeadOverlayValues(1) - 1, 0), step = 1 },
+        { id = "makeup", short = "M1", label = "Makeup", name = "Makeup Style", kind = "overlay", overlay = 4, value = overlayValue(ped, 4), minimum = -1, maximum = math.max(GetNumHeadOverlayValues(4) - 1, 0), step = 1 },
         { id = "hairStyle", short = "H1", label = "Hair Style", name = "Hair Style", kind = "hairStyle", value = GetPedDrawableVariation(ped, 2), minimum = 0, maximum = math.max(GetNumberOfPedDrawableVariations(ped, 2) - 1, 0), step = 1 },
         { id = "hairColor", short = "H2", label = "Hair Color", name = "Hair Color", kind = "hairColor", value = GetPedHairColor(ped), minimum = 0, maximum = math.max(GetNumHairColors() - 1, 0), step = 1 }
     }
@@ -578,14 +655,14 @@ local function applyHeadBlend()
     end
 end
 
-local function applyAppearanceItem(targetPed, item)
+applyAppearanceItem = function(targetPed, item)
     if not targetPed or not DoesEntityExist(targetPed) then return end
     if item.kind == "faceFeature" then
         SetPedFaceFeature(targetPed, item.feature, item.value)
     elseif item.kind == "eyeColor" then
         SetPedEyeColor(targetPed, item.value)
     elseif item.kind == "overlay" then
-        SetPedHeadOverlay(targetPed, item.overlay, item.value, 1.0)
+        applyHeadOverlay(targetPed, item.overlay, item.value)
     elseif item.kind == "hairStyle" then
         SetPedComponentVariation(targetPed, 2, item.value, GetPedTextureVariation(targetPed, 2), 0)
     elseif item.kind == "hairColor" then
@@ -594,6 +671,7 @@ local function applyAppearanceItem(targetPed, item)
 end
 
 local function openCustomClothing()
+    XSPed.stop()
     local ped = PlayerPedId()
     local gender = activeCharacterData and activeCharacterData.charinfo and activeCharacterData.charinfo.gender or 0
     local model = XSAppearance.model(nil, gender)
