@@ -99,7 +99,7 @@ local function overlayValue(ped, overlay)
     return value == 255 and -1 or value
 end
 
-local function applyHeadOverlay(targetPed, overlay, value)
+local function applyHeadOverlay(targetPed, overlay, value, hairColor, hairHighlight)
     if not targetPed or not DoesEntityExist(targetPed) then return end
     if value == nil or value < 0 or value == 255 then
         SetPedHeadOverlay(targetPed, overlay, 255, 0.0)
@@ -108,24 +108,62 @@ local function applyHeadOverlay(targetPed, overlay, value)
 
     SetPedHeadOverlay(targetPed, overlay, math.floor(value), 1.0)
     if overlay == 1 or overlay == 2 then
-        local hairColor = GetPedHairColor(targetPed)
-        local hairHighlight = GetPedHairHighlightColor(targetPed)
-        SetPedHeadOverlayColor(targetPed, overlay, 1, hairColor, hairHighlight)
+        local selectedHairColor = math.max(0, math.floor(tonumber(hairColor) or GetPedHairColor(targetPed) or 0))
+        local selectedHighlight = math.max(0, math.floor(tonumber(hairHighlight) or GetPedHairHighlightColor(targetPed) or selectedHairColor))
+        SetPedHeadOverlayColor(targetPed, overlay, 1, selectedHairColor, selectedHighlight)
     end
 end
 
-local function applyHairColor(targetPed, color)
+local function applyHairColor(targetPed, color, highlight)
     if not targetPed or not DoesEntityExist(targetPed) then return end
     local hairColor = math.max(0, math.floor(tonumber(color) or 0))
-    SetPedHairColor(targetPed, hairColor, hairColor)
+    local hairHighlight = math.max(0, math.floor(tonumber(highlight) or hairColor))
+    SetPedHairColor(targetPed, hairColor, hairHighlight)
+    -- Freemode facial-hair overlays use the hair color channel. Reapply it
+    -- after changing the component because GTA can reset overlay colors.
+    for _, overlay in ipairs({ 1, 2 }) do
+        local value = overlayValue(targetPed, overlay)
+        if value >= 0 then SetPedHeadOverlayColor(targetPed, overlay, 1, hairColor, hairHighlight) end
+    end
+end
+
+local function editorItem(itemId)
+    for _, item in ipairs(clothingItems) do
+        if item.id == itemId then return item end
+    end
+    return nil
+end
+
+local function editorHairColors()
+    local item = editorItem("hairColor")
+    local color = item and item.value or 0
+    return color, color
+end
+
+local function applyHairAppearance(targetPed)
+    if not targetPed or not DoesEntityExist(targetPed) then return end
+    local style = editorItem("hairStyle")
+    local hairComponent = editorItem("hair")
+    local hairColor, hairHighlight = editorHairColors()
+
+    if style then
+        local texture = GetPedTextureVariation(targetPed, 2)
+        SetPedComponentVariation(targetPed, 2, math.floor(style.value or 0), texture, 0)
+    elseif hairComponent then
+        SetPedComponentVariation(targetPed, 2, math.floor(hairComponent.drawable or 0), math.floor(hairComponent.texture or 0), 0)
+    end
+
+    applyHairColor(targetPed, hairColor, hairHighlight)
 end
 
 local function copyHeadAppearance(sourcePed, targetPed)
+    local hairColor = GetPedHairColor(sourcePed)
+    local hairHighlight = GetPedHairHighlightColor(sourcePed)
     SetPedEyeColor(targetPed, GetPedEyeColor(sourcePed))
-    applyHairColor(targetPed, GetPedHairColor(sourcePed))
+    applyHairColor(targetPed, hairColor, hairHighlight)
 
     for overlay = 0, 12 do
-        applyHeadOverlay(targetPed, overlay, overlayValue(sourcePed, overlay))
+        applyHeadOverlay(targetPed, overlay, overlayValue(sourcePed, overlay), hairColor, hairHighlight)
     end
 end
 
@@ -636,7 +674,7 @@ local function appearanceCategories(ped)
         { id = "beard", short = "B2", label = "Facial Hair", name = "Beard Style", kind = "overlay", overlay = 1, value = overlayValue(ped, 1), minimum = -1, maximum = math.max(GetNumHeadOverlayValues(1) - 1, 0), step = 1 },
         { id = "makeup", short = "M1", label = "Makeup", name = "Makeup Style", kind = "overlay", overlay = 4, value = overlayValue(ped, 4), minimum = -1, maximum = math.max(GetNumHeadOverlayValues(4) - 1, 0), step = 1 },
         { id = "hairStyle", short = "H1", label = "Hair Style", name = "Hair Style", kind = "hairStyle", value = GetPedDrawableVariation(ped, 2), minimum = 0, maximum = math.max(GetNumberOfPedDrawableVariations(ped, 2) - 1, 0), step = 1 },
-        { id = "hairColor", short = "H2", label = "Hair Color", name = "Hair Color", kind = "hairColor", value = GetPedHairColor(ped), minimum = 0, maximum = math.max(GetNumHairColors() - 1, 0), step = 1 }
+        { id = "hairColor", short = "H2", label = "Hair Color", name = "Hair Color", kind = "hairColor", value = GetPedHairColor(ped), minimum = 0, maximum = math.max(GetNumHairColors() - 1, 63), step = 1 }
     }
     return categories
 end
@@ -703,21 +741,23 @@ applyAppearanceItem = function(targetPed, item)
     elseif item.kind == "eyeColor" then
         SetPedEyeColor(targetPed, item.value)
     elseif item.kind == "overlay" then
-        applyHeadOverlay(targetPed, item.overlay, item.value)
+        local hairColor, hairHighlight = editorHairColors()
+        applyHeadOverlay(targetPed, item.overlay, item.value, hairColor, hairHighlight)
     elseif item.kind == "hairStyle" then
-        SetPedComponentVariation(targetPed, 2, math.floor(item.value), GetPedTextureVariation(targetPed, 2), 0)
+        applyHairAppearance(targetPed)
     elseif item.kind == "hairColor" then
-        applyHairColor(targetPed, item.value)
+        applyHairAppearance(targetPed)
     end
 end
 
 applyEditorAppearance = function(targetPed)
     if not targetPed or not DoesEntityExist(targetPed) then return end
 
-    -- Component 2 changes can clear overlays, so hair and facial overlays are
-    -- deliberately applied in separate passes.
+    -- Component 2 can reset native hair and overlay colors. Apply the complete
+    -- hair state first, then overlays, then the hair color one final time.
+    applyHairAppearance(targetPed)
     for _, item in ipairs(clothingItems) do
-        if item.kind == "faceFeature" or item.kind == "eyeColor" or item.kind == "hairStyle" or item.kind == "hairColor" then
+        if item.kind == "faceFeature" or item.kind == "eyeColor" then
             applyAppearanceItem(targetPed, item)
         end
     end
@@ -726,6 +766,8 @@ applyEditorAppearance = function(targetPed)
             applyAppearanceItem(targetPed, item)
         end
     end
+    local hairColor, hairHighlight = editorHairColors()
+    applyHairColor(targetPed, hairColor, hairHighlight)
 end
 
 local function syncHairControls(changedItem)
@@ -737,6 +779,7 @@ local function syncHairControls(changedItem)
             item.value = changedItem.drawable
         elseif changedItem.kind == "hairStyle" and item.kind == "component" and item.slot == 2 then
             item.drawable = changedItem.value
+            item.texture = item.texture or 0
             item.drawables = math.max(GetNumberOfPedDrawableVariations(PlayerPedId(), 2), 1)
         end
     end

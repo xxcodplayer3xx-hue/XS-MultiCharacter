@@ -401,6 +401,112 @@ RegisterNetEvent('XS-MultiCharacter:server:ped', function(payload)
     XSStorage.setPed(citizenid, model, sanitizeVariation(payload.variation))
 end)
 
+local function nativeAppearancePayload(payload)
+    if type(payload) ~= 'table' then return nil end
+    local appearance = { components = {}, props = {}, headBlend = {}, faceFeatures = {}, hair = {}, eyeColor = 0, headOverlays = {} }
+    for _, component in ipairs(payload.components or {}) do
+        if type(component) == 'table' and #appearance.components < 12 then
+            appearance.components[#appearance.components + 1] = {
+                id = index(component.id, 11),
+                drawable = index(component.drawable, 4095),
+                texture = index(component.texture, 255),
+                palette = index(component.palette, 15)
+            }
+        end
+    end
+    for _, prop in ipairs(payload.props or {}) do
+        if type(prop) == 'table' and #appearance.props < 8 then
+            appearance.props[#appearance.props + 1] = {
+                id = index(prop.id, 7),
+                drawable = math.max(-1, math.min(4095, math.floor(tonumber(prop.drawable) or -1))),
+                texture = index(prop.texture, 255)
+            }
+        end
+    end
+    local blend = payload.headBlend
+    if type(blend) == 'table' then
+        appearance.headBlend = {
+            shapeFirst = index(blend.shapeFirst, 45),
+            shapeSecond = index(blend.shapeSecond, 45),
+            shapeThird = index(blend.shapeThird, 45),
+            skinFirst = index(blend.skinFirst, 45),
+            skinSecond = index(blend.skinSecond, 45),
+            skinThird = index(blend.skinThird, 45),
+            shapeMix = math.max(0.0, math.min(1.0, tonumber(blend.shapeMix) or 0.5)),
+            skinMix = math.max(0.0, math.min(1.0, tonumber(blend.skinMix) or 0.5)),
+            thirdMix = math.max(0.0, math.min(1.0, tonumber(blend.thirdMix) or 0.0))
+        }
+    end
+    for feature, value in pairs(payload.faceFeatures or {}) do
+        local featureId = index(feature, 19)
+        if featureId then appearance.faceFeatures[tostring(featureId)] = math.max(-1.0, math.min(1.0, tonumber(value) or 0.0)) end
+    end
+    local hair = payload.hair
+    if type(hair) == 'table' then
+        appearance.hair = {
+            style = index(hair.style, 4095),
+            texture = index(hair.texture, 255),
+            color = index(hair.color, 63),
+            highlight = index(hair.highlight, 63)
+        }
+    end
+    appearance.eyeColor = index(payload.eyeColor, 8)
+    for overlay, data in pairs(payload.headOverlays or {}) do
+        local overlayId = index(overlay, 12)
+        if type(data) == 'table' and overlayId then
+            appearance.headOverlays[tostring(overlayId)] = {
+                style = math.max(-1, math.min(255, math.floor(tonumber(data.style) or -1))),
+                opacity = math.max(0.0, math.min(1.0, tonumber(data.opacity) or 1.0)),
+                color = index(data.color, 63),
+                secondColor = index(data.secondColor, 63)
+            }
+        end
+    end
+    return appearance
+end
+
+RegisterNetEvent('XS-MultiCharacter:server:saveNativeAppearance', function(payload)
+    local src = source
+    if type(payload) ~= 'table' or not ready(src, 'appearanceSave', 1500) then return end
+    local player = XSBridge.getPlayer(src)
+    if not player then return end
+    local citizenid = player.PlayerData.citizenid
+    local appearance = nativeAppearancePayload(payload)
+    if not appearance then return end
+    local config = Config.Server.Appearance
+    if not config.enabled then return end
+
+    local model = normalizeHash(GetPlayerPed(src) and GetEntityModel(GetPlayerPed(src))) or normalizeHash('mp_m_freemode_01')
+    local columns = { '`%s` = ?' }
+    local values = { model, json.encode(appearance) }
+    local updateQuery = ('UPDATE `%s` SET `%s` = ?, `%s` = ?'):format(config.table, config.modelColumn, config.appearanceColumn)
+    if config.activeColumn then
+        updateQuery = ('%s, `%s` = 1'):format(updateQuery, config.activeColumn)
+    end
+    updateQuery = ('%s WHERE `%s` = ?'):format(updateQuery, config.identifierColumn)
+    local ok, updated = pcall(MySQL.update.await, updateQuery, { model, json.encode(appearance), citizenid })
+    if not ok then
+        print(('[%s] Native appearance save failed for %s: %s'):format(RESOURCE, citizenid, updated))
+        return
+    end
+    local existsOk, exists = pcall(MySQL.scalar.await, ('SELECT 1 FROM `%s` WHERE `%s` = ? LIMIT 1'):format(config.table, config.identifierColumn), { citizenid })
+    if not existsOk then
+        print(('[%s] Native appearance verification failed for %s: %s'):format(RESOURCE, citizenid, exists))
+        return
+    end
+    if not exists then
+        local insertColumns = ('`%s`, `%s`, `%s`'):format(config.identifierColumn, config.modelColumn, config.appearanceColumn)
+        local insertValues = { citizenid, model, json.encode(appearance) }
+        local placeholders = '?, ?, ?'
+        if config.activeColumn then
+            insertColumns = ('%s, `%s`'):format(insertColumns, config.activeColumn)
+            placeholders = '?, ?, ?, 1'
+        end
+        local insertOk, insertError = pcall(MySQL.insert.await, ('INSERT INTO `%s` (%s) VALUES (%s)'):format(config.table, insertColumns, placeholders), insertValues)
+        if not insertOk then print(('[%s] Native appearance insert failed for %s: %s'):format(RESOURCE, citizenid, insertError)) end
+    end
+end)
+
 RegisterNetEvent('XS-MultiCharacter:server:selectSpawn', function(spawnId)
     local src = source
     if type(spawnId) ~= 'string' then return end
