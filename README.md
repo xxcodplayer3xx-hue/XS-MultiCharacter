@@ -23,7 +23,7 @@ The character screen loads the player's saved appearance, gives each character a
 ## Features
 
 - Qbox and QBCore support
-- Saved appearance previews for illenium-appearance, fivem-appearance, and qb-clothing
+- Saved appearance previews for qs-appearance, illenium-appearance, fivem-appearance, and qb-clothing
 - Immediate first-character Style Lab with a visible live player preview
 - Face creation controls for face blend, skin tone, eye color, facial features, hair, eyebrows, beard, and makeup
 - Live clothing, props, textures, and preview rotation controls
@@ -211,7 +211,19 @@ playerskins: id, citizenid, model, skin, active
 
 If your appearance resource renamed its table or columns, change `Config.Server.Appearance`. SQL identifiers are validated before any query is built.
 
-The client adapter is selected automatically. You can force it in `Config.Client.Integrations.appearance` if more than one clothing resource happens to be installed.
+The client adapter is selected automatically. `qs-appearance` is checked first, followed by illenium-appearance, fivem-appearance, and qb-clothing. You can force it in `Config.Client.Integrations.appearance` if more than one clothing resource happens to be installed.
+
+### qs-appearance
+
+To use Quasar's appearance resource as the first-character editor, disable the built-in Style Lab and either leave detection enabled or force the integration:
+
+```lua
+Config.FirstCharacter.clothing.custom = false
+Config.FirstCharacter.clothing.mode = 'qs-appearance'
+Config.Client.Integrations.appearance = 'qs-appearance'
+```
+
+The adapter looks for the `qs-appearance` resource, opens its configured first-character event, and keeps the saved appearance preview compatible with the existing `playerskins` query. The default event is `qs-appearance:client:openMenu`; if your purchased build uses a different event or export, change `Config.Client.Integrations.qsAppearance` in `config/client.lua`. Set `finishedEvent` to the event your build emits when customization closes so the apartment handoff can continue. This integration is optional and does not add `qs-appearance` as a hard resource dependency.
 
 ## Saved peds
 
@@ -328,7 +340,7 @@ Set `custom = false` to use the configured external appearance menu instead. Aut
 
 After the look is saved, the resource opens the configured apartment selector. If no apartment resource is available, it spawns at `Config.Spawn.default`. The external appearance handoff and its timing options are only used when `custom = false`; the custom editor does not wait for another menu.
 
-Clothing opens with `qb-clothes:client:CreateFirstCharacter`, which qb-clothing, illenium-appearance, and fivem-appearance all listen for. If yours uses a different event, put it in `Config.FirstCharacter.clothing.firstCharacterEvent`.
+Clothing opens with the selected adapter. For qb-clothing, illenium-appearance, and fivem-appearance it uses `Config.FirstCharacter.clothing.firstCharacterEvent`. For qs-appearance it uses `Config.Client.Integrations.qsAppearance.firstCharacterEvent` or its configured export. If yours uses a different event, update the matching setting.
 
 If you use a custom apartment event that does not open clothing, set `Config.FirstCharacter.apartments.opensClothingAfterSelection` to `false`. It will use the clothing-first fallback and watch the events in `Config.FirstCharacter.clothing.finishedEvents` before opening your apartment event.
 

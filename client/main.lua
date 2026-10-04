@@ -582,6 +582,11 @@ for i = 1, #Config.FirstCharacter.clothing.finishedEvents do
     RegisterNetEvent(Config.FirstCharacter.clothing.finishedEvents[i], openApartmentsAfterClothing)
 end
 
+local qsFinishedEvent = XSAppearance.qsAppearanceFinishedEvent()
+if qsFinishedEvent then
+    RegisterNetEvent(qsFinishedEvent, openApartmentsAfterClothing)
+end
+
 local firstCharacterEvent = XSAppearance.firstCharacterEvent()
 if firstCharacterEvent then
     AddEventHandler(firstCharacterEvent, function()

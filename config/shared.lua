@@ -19,7 +19,8 @@ Config.FirstCharacter = {
         enabled = true,
         custom = true, -- use this resource's custom native clothing lab instead of a stock editor
         -- Set custom to false to return to the configured external appearance menu.
-        mode = 'auto', -- auto, qb-clothing, illenium-appearance, fivem-appearance, event, none
+        -- Use mode = 'qs-appearance' to force qs-appearance, or leave auto to detect it.
+        mode = 'auto', -- auto, qs-appearance, qb-clothing, illenium-appearance, fivem-appearance, event, none
         event = '',
 
         -- Every QB and Qbox appearance resource listens for this to build a new
@@ -29,7 +30,8 @@ Config.FirstCharacter = {
         finishedEvents = {
             'qb-clothing:client:onMenuClose',
             'illenium-appearance:client:finishedCustomization',
-            'fivem-appearance:client:finishedCustomization'
+            'fivem-appearance:client:finishedCustomization',
+            'qs-appearance:client:finishedCustomization'
         },
         fallbackSeconds = 15,
 

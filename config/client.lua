@@ -99,7 +99,21 @@ Config.Client.CinematicSpawn = {
 }
 
 Config.Client.Integrations = {
-    appearance = 'auto', -- auto, illenium-appearance, fivem-appearance, qb-clothing, none
+    -- auto detects qs-appearance first, then illenium-appearance,
+    -- fivem-appearance, and qb-clothing.
+    appearance = 'auto', -- auto, qs-appearance, illenium-appearance, fivem-appearance, qb-clothing, none
+    qsAppearance = {
+        resource = 'qs-appearance',
+        -- Leave these empty to use the adapter's supported export fallbacks.
+        -- Set the event/export names if your qs-appearance build uses custom names.
+        firstCharacterExports = {},
+        firstCharacterEvent = 'qs-appearance:client:openMenu',
+        finishedEvent = 'qs-appearance:client:finishedCustomization',
+        setPedExports = {},
+        getPedExports = {},
+        saveExports = {},
+        saveEvent = ''
+    },
     apartments = 'auto', -- auto, qbx, qb, event, none
     weather = 'auto', -- auto, qb-weathersync, qbx, cd_easytime, native, none
     housing = 'auto' -- auto, qb-houses, qbx_properties, event, none
