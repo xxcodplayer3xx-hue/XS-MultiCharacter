@@ -3,9 +3,9 @@ game 'gta5'
 lua54 'yes'
 
 name 'XS-MultiCharacter'
-author 'XyraL'
-description 'A clean multicharacter and spawn flow for Qbox and QBCore.'
-version '2.2.24'
+author 'SwisserAI'
+description 'HallowayRP multicharacter and spawn flow. Generated with SwisserAI - https://ai.swisser.dev'
+version '2.2.25'
 
 shared_scripts {
     'config/shared.lua',

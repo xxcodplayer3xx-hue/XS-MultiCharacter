@@ -1,4 +1,4 @@
-<h1 align="center">XS-MultiCharacter</h1>
+<h1 align="center">HallowayRP MultiCharacter</h1>
 
 <p align="center">A cinematic identity, character selection, and spawn flow for <strong>QBox</strong> and <strong>QBCore</strong>.</p>
 

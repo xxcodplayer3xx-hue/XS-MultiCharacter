@@ -26,7 +26,7 @@ Config.Client.ClothingPreview = {
     -- leaves the ped tiny because the old camera was over 20 metres away.
     camera = vec3(-1333.60, -3042.60, 15.80),
     cameraLookAt = vec3(-1336.00, -3044.00, 14.95),
-    fov = 27.0
+    fov = 45.0
 }
 
 Config.Client.SceneEffects = {
@@ -120,7 +120,7 @@ Config.Client.Integrations = {
 }
 
 Config.Client.UI = {
-    title = 'XYRAL',
+    title = 'HallowayRP',
     subtitle = 'IDENTITY NETWORK',
     accent = '#8b5cf6',
     background = '#090a0f',

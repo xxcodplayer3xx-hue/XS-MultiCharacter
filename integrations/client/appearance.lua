@@ -297,48 +297,13 @@ end
 --- @return boolean success Whether an appearance save request was sent
 function XSAppearance.saveCurrent()
     if Config.FirstCharacter.clothing.custom ~= true then return false end
-    local mode = XSAppearance.mode()
-    local ped = PlayerPedId()
-    local ok, appearance
-    if mode == "illenium-appearance" or mode == "fivem-appearance" then
-        ok, appearance = pcall(function()
-            return exports[mode]:getPedAppearance(ped)
-        end)
-        if ok and appearance then
-            TriggerServerEvent(("%s:server:saveAppearance"):format(mode), appearance)
-            return true
-        end
-    end
-    if mode == "qs-appearance" then
-        local settings = qsSettings()
-        local resource = settings.resource or "qs-appearance"
-        local getterMethods = exportMethods(settings.getPedExports, { "getPedAppearance", "getAppearance" })
-        for _, method in ipairs(getterMethods) do
-            ok, appearance = pcall(function()
-                return exports[resource][method](ped)
-            end)
-            if ok and type(appearance) == "table" then
-                local saveEvent = settings.saveEvent
-                if type(saveEvent) == "string" and saveEvent ~= "" then
-                    TriggerServerEvent(saveEvent, appearance)
-                    return true
-                end
-                local saveMethods = exportMethods(settings.saveExports, { "saveAppearance", "savePedAppearance" })
-                for _, saveMethod in ipairs(saveMethods) do
-                    if callExport(resource, saveMethod, appearance) then return true end
-                end
-            end
-        end
-    end
-    if mode == "qb-clothing" then
-        TriggerEvent("qb-clothing:client:saveSkin")
-        return true
-    end
 
-    local nativeAppearance = nativeAppearanceFromPed(ped)
-    if nativeAppearance then
-        TriggerServerEvent("XS-MultiCharacter:server:saveNativeAppearance", nativeAppearance)
-        return true
-    end
-    return false
+    -- The built-in Style Lab is native, so persist the exact native ped state
+    -- and stop here. Calling an external getter afterward can return stale data
+    -- and overwrite the selected hair texture, hair color, or beard.
+    local nativeAppearance = nativeAppearanceFromPed(PlayerPedId())
+    if not nativeAppearance then return false end
+
+    TriggerServerEvent("XS-MultiCharacter:server:saveNativeAppearance", nativeAppearance)
+    return true
 end
